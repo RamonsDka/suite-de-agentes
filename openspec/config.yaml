@@ -1,0 +1,47 @@
+schema: spec-driven
+
+context: |
+  Tech stack: TypeScript ESM, Node.js 24, OpenCode Plugin 1.18.5, Solid/OpenTUI 0.4.5.
+  Architecture: independent server and TUI entrypoints with pure core modules.
+  Testing: Vitest via npm test; typecheck via npm run typecheck; build via npm run build.
+  Style: strict TypeScript, ESM, immutable core operations, fail-closed consent policy.
+
+strict_tdd: true
+
+testing:
+  test_runner:
+    framework: vitest
+    command: npm test
+  layers:
+    unit: true
+    integration: true
+    e2e: false
+  coverage:
+    available: false
+  quality:
+    linter: null
+    type_checker: npm run typecheck
+    formatter: null
+    build: npm run build
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Identify affected modules and user-visible behavior
+  specs:
+    - Use Given/When/Then scenarios
+    - Use RFC 2119 keywords
+  design:
+    - Prefer the smallest boundary consistent with existing architecture
+    - Document decisions and migration behavior
+  tasks:
+    - Group tasks by implementation and verification phase
+    - Keep tasks small and independently verifiable
+  apply:
+    - Follow strict RED-GREEN-REFACTOR
+    - Preserve unrelated OpenCode configuration
+  verify:
+    - Run tests, typecheck, and build
+    - Compare behavior against every scenario
+  archive:
+    - Preserve the final verification evidence
