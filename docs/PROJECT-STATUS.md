@@ -40,7 +40,17 @@ These artifacts are preserved as product history and continuation context. This 
 
 - The product code is source-present, but the deployed runtime smoke gates are not proven by this migration.
 - `agent-suite-floating-app` records WU4 accepted for source tests/typecheck and adapter/UI contracts, while `SMOKE.1`, `SMOKE.2`, and `SMOKE.G` remain pending before final verify/archive.
-- This migration does not claim fresh tests or runtime evidence; no fresh test or runtime harness was run as part of the migration correction.
+- The latest source verification below confirms the source-level test and typecheck gates, but it does not prove a deployed runtime smoke pass.
+
+### Latest source verification
+
+- `npm ci --ignore-scripts` exited 0 with 214 packages; `node_modules` remains ignored. npm warned that `ini@7` requires Node `^24.15.0` while the current runtime is `24.14.0`. npm audit reported 7 vulnerabilities (5 low, 2 high); no audit fix was run.
+- Focused tests passed: 3 files, 14 tests.
+- Full suite passed: 21 files, 84 tests.
+- `tsc --noEmit` exited 0 after commit `9cc1a35`.
+- Current `HEAD` includes commits `75d54b6`, `7de007c`, and `9cc1a35`.
+- `suite-de-agentes/dist` does not exist. The only old bundle is under `revision-selector-agente/dist`; grep confirms it still contains `api.route.navigate`, `registerSuiteRoute`, and route registration, so it is stale/invalid for floating-app `SMOKE.1` and `SMOKE.2`.
+- The project/root instructions prohibit builds. No build is recommended or claimed in this session.
 
 ## Contradictions and known pending work
 
@@ -51,7 +61,7 @@ These artifacts are preserved as product history and continuation context. This 
 
 ## Recommended resumption point
 
-Resume at the `agent-suite-floating-app` smoke gates: validate `SMOKE.1` and `SMOKE.2` against the first externally rebuilt/deployed dist, then satisfy `SMOKE.G` before verify/archive, subject to current evidence.
+Source gates are passed: focused tests, the full suite, and `tsc --noEmit` are recorded above. Resume only at the deployed smoke boundary for `agent-suite-floating-app`: `SMOKE.1` and `SMOKE.2` remain pending because a current external dist is missing, and `SMOKE.G` remains blocked until both pass. Do not use the stale `revision-selector-agente/dist` bundle or repoint the global active configuration to it; the active configuration remains on the old checkout.
 
 Historical snapshots are not pending apply work. Do not treat historical snapshots or old collection exports as pending apply work.
 
