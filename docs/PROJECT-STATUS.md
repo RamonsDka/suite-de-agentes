@@ -31,10 +31,10 @@ These artifacts are preserved as product history and continuation context. This 
 
 ### HEAD and migration base
 
-- Repository HEAD is `46239bebee3ffab1dab68642a6098df403ac174c` on `master` at migration baseline.
-- The preserved working tree is uncommitted. It contains current Suite product edits, including tracked modifications/deletions and untracked second-generation UI source, tests, and OpenSpec artifacts.
-- **Migration safety:** Until a Git base includes the files currently untracked, do not run `git clean`, `git reset --hard`, or equivalent destructive operations.
-- The canonical source checkout at `revision-selector-agente` remains unchanged and is still the source of truth for the captured baseline.
+- The complete recovered Suite state is committed locally on `master` in the standalone repository.
+- Second-generation UI source, replacement tests, documentation, and Suite OpenSpec artifacts are tracked together in the recovery baseline.
+- The former `revision-selector-agente` checkout remains unchanged as a rollback/reference copy, but it is no longer the canonical project directory.
+- The canonical source is this repository: `C:/Users/DELL/projects/0.-MEJORA-OPENCODE-TRABAJANDO/suite-de-agentes`.
 
 ### Evidence boundary
 
