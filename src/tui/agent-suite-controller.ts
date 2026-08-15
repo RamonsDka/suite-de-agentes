@@ -44,6 +44,7 @@ export function createAgentSuiteController(
   let config: SuiteConfig = options.path ? loadSuiteConfig(options.path) : { version: 1, customAgents: { ...rowCustomAgents, ...(options.custom ?? {}) }, modelAssignments: {}, variantAssignments: {} };
   const runtime = options.runtime ?? Object.fromEntries(currentRows.map((row) => [row.id, { model: row.model, variant: row.variant, description: row.description }]));
   const rebuild = () => { currentRows = buildSuiteDeAgentesCatalog(runtime, config.customAgents, seed, config.modelAssignments, config.variantAssignments); };
+  rebuild();
   const persist = () => { if (options.path) saveSuiteConfig(options.path, config); };
   const find = (id: string) => currentRows.find((row) => row.id === id);
   const mutation = async (operation: () => void) => { operation(); persist(); rebuild(); };
