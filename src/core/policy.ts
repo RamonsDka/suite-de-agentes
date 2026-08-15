@@ -1,4 +1,4 @@
-import type { TaskGateDecision, TaskGateInput } from "./types.ts";
+import type { PermissionValue, TaskGateDecision, TaskGateInput } from "./types.ts";
 
 export const SDD_AGENT_ALLOWLIST = [
   "sdd-init", "sdd-explore", "sdd-onboard", "sdd-propose", "sdd-spec",
@@ -44,6 +44,10 @@ export function decideTaskGate(input: TaskGateInput): TaskGateDecision {
   return { allowed: false, reason: `Blocked agent '${input.target}'. Add exactly 'usa también agente: ${input.target}' to the current message.` };
 }
 
-export function transformTaskPermission(): Record<string, "allow" | "deny"> {
-  return { "*": "deny", ...Object.fromEntries(INTERNAL_AGENT_ALLOWLIST.map((agent) => [agent, "allow"])), "general": "deny" };
+export function transformTaskPermission(): Record<string, PermissionValue> {
+  return {
+    "*": "deny",
+    ...Object.fromEntries(INTERNAL_AGENT_ALLOWLIST.map((agent): [string, PermissionValue] => [agent, agent.endsWith("-fallback") ? "ask" : "allow"])),
+    "general": "deny",
+  };
 }

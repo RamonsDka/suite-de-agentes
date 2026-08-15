@@ -17,7 +17,7 @@ Add the server entry to `opencode.json` and the TUI entry to `tui.json`:
 // ~/.config/opencode/opencode.json
 {
   "plugin": [
-    "C:\\path\\to\\revision-selector-agente\\dist\\server.js"
+    "C:\\path\\to\\suite-de-agentes\\dist\\server.js"
   ]
 }
 ```
@@ -26,7 +26,7 @@ Add the server entry to `opencode.json` and the TUI entry to `tui.json`:
 // ~/.config/opencode/tui.json
 {
   "plugin": [
-    "C:\\path\\to\\revision-selector-agente\\dist\\tui.js"
+    "C:\\path\\to\\suite-de-agentes\\dist\\tui.js"
   ]
 }
 ```
@@ -38,7 +38,7 @@ The Suite de Agentes window has exactly two options:
 1. **Catálogo** — browse the owned seed members (`general` and `agent-especialit-github`) and custom agents.
 2. **Crear agente** — keep the existing guided custom-agent workflow.
 
-The catalog is a native, scrollable OpenTUI selection. Each row opens Spanish details and state-aware actions. Custom rows can be materialized or removed; seed rows cannot be deleted. The sidebar and dialog titles show the plugin version (`v0.1.0`).
+The catalog is a native, scrollable OpenTUI selection. Each row opens Spanish details and state-aware actions. Custom rows can be materialized or removed; seed rows cannot be deleted. The sidebar and dialog titles show the plugin version (`v1.0.1`).
 
 Exact Windows and POSIX examples are in [`docs/local-install.md`](docs/local-install.md).
 
@@ -133,3 +133,7 @@ npm run build
 ```
 
 See [`docs/architecture.md`](docs/architecture.md) and [`docs/local-install.md`](docs/local-install.md).
+
+## Project status
+
+See [docs/PROJECT-STATUS.md](docs/PROJECT-STATUS.md) for the current product boundary, preserved workstreams, migration status, and recommended resumption point.

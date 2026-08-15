@@ -7,7 +7,7 @@ Suite de Agentes is not published on npm. These examples use the checkout direct
 From PowerShell:
 
 ```powershell
-Set-Location -LiteralPath "C:\Users\DELL\projects\0.-MEJORA-OPENCODE-TRABAJANDO\revision-selector-agente"
+Set-Location -LiteralPath "C:\Users\DELL\projects\0.-MEJORA-OPENCODE-TRABAJANDO\suite-de-agentes"
 npm install
 npm run build
 ```
@@ -17,7 +17,7 @@ Add the server entry to `C:\Users\DELL\.config\opencode\opencode.json`:
 ```json
 {
   "plugin": [
-    "C:\\Users\\DELL\\projects\\0.-MEJORA-OPENCODE-TRABAJANDO\\revision-selector-agente\\dist\\server.js"
+    "C:\\Users\\DELL\\projects\\0.-MEJORA-OPENCODE-TRABAJANDO\\suite-de-agentes\\dist\\server.js"
   ]
 }
 ```
@@ -27,19 +27,19 @@ Add the TUI entry to `C:\Users\DELL\.config\opencode\tui.json`:
 ```json
 {
   "plugin": [
-    "C:\\Users\\DELL\\projects\\0.-MEJORA-OPENCODE-TRABAJANDO\\revision-selector-agente\\dist\\tui.js"
+    "C:\\Users\\DELL\\projects\\0.-MEJORA-OPENCODE-TRABAJANDO\\suite-de-agentes\\dist\\tui.js"
   ]
 }
 ```
 
 ## Use the TUI
 
-Restart OpenCode after installing the plugin. Press **Alt+S** or run `/agent-suite`; the window contains only **Catálogo** and **Crear agente**. The catalog footer/title reports the plugin version (`v0.1.0`).
+Restart OpenCode after installing the plugin. Press **Alt+S** or run `/agent-suite`; the window contains only **Catálogo** and **Crear agente**. The catalog footer/title reports the plugin version (`v1.0.1`).
 
 ## POSIX
 
 ```sh
-cd /path/to/revision-selector-agente
+cd /path/to/suite-de-agentes
 npm install
 npm run build
 ```
@@ -49,7 +49,7 @@ npm run build
 ```json
 {
   "plugin": [
-    "/path/to/revision-selector-agente/dist/server.js"
+    "/path/to/suite-de-agentes/dist/server.js"
   ]
 }
 ```
@@ -59,7 +59,7 @@ npm run build
 ```json
 {
   "plugin": [
-    "/path/to/revision-selector-agente/dist/tui.js"
+    "/path/to/suite-de-agentes/dist/tui.js"
   ]
 }
 ```

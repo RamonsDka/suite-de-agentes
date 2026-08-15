@@ -1,6 +1,6 @@
 {
   "name": "opencode-agent-suite",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "description": "Named agent suites, model profiles, and per-turn consent controls for OpenCode",
   "type": "module",
   "main": "./dist/server.js",

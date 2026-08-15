@@ -58,7 +58,7 @@ describe("task policy", () => {
   it("emits a deny-by-default task configuration with SDD exact allows", () => {
     const result = transformTaskPermission();
     expect(result["*"]).toBe("deny");
-    for (const agent of CONFIGURED_INTERNAL_AGENTS) expect(result[agent]).toBe("allow");
+    for (const agent of CONFIGURED_INTERNAL_AGENTS) expect(result[agent]).toBe(agent.endsWith("-fallback") ? "ask" : "allow");
     expect(result["sdd-evil"]).toBeUndefined();
     expect(result.general).toBe("deny");
   });
