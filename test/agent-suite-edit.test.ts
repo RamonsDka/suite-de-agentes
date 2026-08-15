@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { KeyEvent } from "@opencode-ai/plugin/tui";
 import { reduceNav, type NavState } from "../src/tui/agent-suite-nav.ts";
 import { applyInlineEdit, eventForKey, handleInlineEditKey } from "../src/tui/agent-suite-app.tsx";
 import type { AgentSuiteController } from "../src/tui/agent-suite-controller.ts";
@@ -21,6 +22,16 @@ const menuState: NavState = {
   busy: false,
   closing: false,
 };
+
+function keyEvent(name: string) {
+  const preventDefault = vi.fn();
+  const stopPropagation = vi.fn();
+  return {
+    key: { name, preventDefault, stopPropagation } as unknown as KeyEvent,
+    preventDefault,
+    stopPropagation,
+  };
+}
 
 function fakeController(overrides: Partial<AgentSuiteController> = {}): AgentSuiteController & { calls: string[] } {
   const calls: string[] = [];
@@ -57,23 +68,23 @@ describe("Agent Suite inline editing", () => {
     const controller = fakeController();
     const dispatch = vi.fn();
     const state = reduceNav(reduceNav(menuState, { type: "MODIFY_ACTIVATE", option: "skills" }), { type: "EDIT_SKILLS_TOGGLE", index: 0, skill: "testing" });
-    const key = { name: "return", preventDefault: vi.fn(), stopPropagation: vi.fn() } as never;
+    const { key, preventDefault, stopPropagation } = keyEvent("return");
 
     await expect(handleInlineEditKey(key, state.stack.at(-1)!, controller, dispatch, vi.fn())).resolves.toBe(true);
     expect(controller.calls).toEqual(["skills:testing", "refresh"]);
     expect(dispatch).toHaveBeenCalledTimes(1);
-    expect(key.preventDefault).toHaveBeenCalledTimes(1);
-    expect(key.stopPropagation).toHaveBeenCalledTimes(1);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
   });
 
   it("preserves Esc cancellation for the skills editor", async () => {
     const state = reduceNav(menuState, { type: "MODIFY_ACTIVATE", option: "skills" });
     const dispatch = vi.fn();
-    const key = { name: "escape", preventDefault: vi.fn(), stopPropagation: vi.fn() } as never;
+    const { key, preventDefault, stopPropagation } = keyEvent("escape");
     await expect(handleInlineEditKey(key, state.stack.at(-1)!, fakeController(), dispatch, vi.fn())).resolves.toBe(true);
     expect(dispatch).toHaveBeenCalledWith({ type: "BACK" });
-    expect(key.preventDefault).toHaveBeenCalledTimes(1);
-    expect(key.stopPropagation).toHaveBeenCalledTimes(1);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces a skills persistence failure without leaving edit mode silently", async () => {
@@ -82,7 +93,7 @@ describe("Agent Suite inline editing", () => {
     const setError = vi.fn();
     const state = reduceNav(menuState, { type: "MODIFY_ACTIVATE", option: "skills" });
 
-    await handleInlineEditKey({ name: "return", preventDefault: vi.fn(), stopPropagation: vi.fn() } as never, state.stack.at(-1)!, controller, dispatch, setError);
+    await handleInlineEditKey(keyEvent("return").key, state.stack.at(-1)!, controller, dispatch, setError);
     expect(setError).toHaveBeenCalledWith("write failed");
     expect(dispatch).not.toHaveBeenCalled();
   });
@@ -120,9 +131,9 @@ describe("Agent Suite inline editing", () => {
       { type: "MODIFY_ACTIVATE", option: "operations", operations: "Review carefully" },
     );
 
-    expect(eventForKey({ name: "escape" } as never, state)).toEqual({ type: "BACK" });
-    expect(eventForKey({ name: "f10" } as never, state)).toEqual({ type: "REQUEST_CLOSE" });
-    expect(eventForKey({ name: "return" } as never, state)).toBeUndefined();
-    expect(eventForKey({ name: "linefeed" } as never, state)).toBeUndefined();
+    expect(eventForKey(keyEvent("escape").key, state)).toEqual({ type: "BACK" });
+    expect(eventForKey(keyEvent("f10").key, state)).toEqual({ type: "REQUEST_CLOSE" });
+    expect(eventForKey(keyEvent("return").key, state)).toBeUndefined();
+    expect(eventForKey(keyEvent("linefeed").key, state)).toBeUndefined();
   });
 });
