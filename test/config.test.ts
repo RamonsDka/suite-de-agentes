@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSuiteConfig, setAgentModelAssignment, validateAgentId, validateVariantId } from "../src/core/config.ts";
+import { parseSuiteConfig, patchCustomAgent, setAgentModelAssignment, validateAgentId, validateSkillId, validateVariantId } from "../src/core/config.ts";
 
 const customAgent = {
   id: "local-helper",
@@ -11,6 +11,80 @@ const customAgent = {
 };
 
 describe("suite config", () => {
+  it("patches a custom agent without mutating input and re-keys assignments in the v1 shape", () => {
+    const config = parseSuiteConfig({
+      version: 1,
+      customAgents: {
+        "local-helper": customAgent,
+        "other-agent": { ...customAgent, id: "other-agent" },
+      },
+      modelAssignments: { "local-helper": "openai/assigned", "other-agent": "openai/other" },
+      variantAssignments: { "local-helper": "high", "other-agent": "low" },
+    });
+
+    const patched = patchCustomAgent(config, "local-helper", {
+      newId: "renamed-helper",
+      description: "Updated helper",
+      skills: ["testing", "linting"],
+      operations: "Help better locally",
+    });
+
+    expect(patched).toEqual({
+      version: 1,
+      customAgents: {
+        "renamed-helper": {
+          ...customAgent,
+          id: "renamed-helper",
+          description: "Updated helper",
+          skills: ["testing", "linting"],
+          prompt: "Help better locally",
+        },
+        "other-agent": { ...customAgent, id: "other-agent" },
+      },
+      modelAssignments: { "renamed-helper": "openai/assigned", "other-agent": "openai/other" },
+      variantAssignments: { "renamed-helper": "high", "other-agent": "low" },
+    });
+    expect(config).toEqual(parseSuiteConfig({
+      version: 1,
+      customAgents: {
+        "local-helper": customAgent,
+        "other-agent": { ...customAgent, id: "other-agent" },
+      },
+      modelAssignments: { "local-helper": "openai/assigned", "other-agent": "openai/other" },
+      variantAssignments: { "local-helper": "high", "other-agent": "low" },
+    }));
+  });
+
+  it("rejects invalid and colliding patch IDs before changing the registry", () => {
+    const config = parseSuiteConfig({ version: 1, customAgents: { "local-helper": customAgent }, modelAssignments: {}, variantAssignments: {} });
+    const before = structuredClone(config);
+    expect(() => patchCustomAgent(config, "local-helper", { newId: "../escape" })).toThrow(/invalid|identificador|id/i);
+    expect(() => patchCustomAgent(config, "local-helper", { newId: "general" })).toThrow(/collision|colisi[oó]n|seed|existe|exists/i);
+    expect(() => patchCustomAgent(config, "local-helper", { newId: "local-helper" })).not.toThrow();
+    expect(config).toEqual(before);
+  });
+
+  it("rejects patch IDs reserved by either assignment map", () => {
+    const config = parseSuiteConfig({
+      version: 1,
+      customAgents: { "local-helper": customAgent },
+      modelAssignments: { "model-reserved": "openai/reserved" },
+      variantAssignments: { "variant-reserved": "high" },
+    });
+
+    expect(() => patchCustomAgent(config, "local-helper", { newId: "model-reserved" })).toThrow(/collision|colisi[oó]n|assignment|asignaci[oó]n/i);
+    expect(() => patchCustomAgent(config, "local-helper", { newId: "variant-reserved" })).toThrow(/collision|colisi[oó]n|assignment|asignaci[oó]n/i);
+    expect(config.customAgents["local-helper"]).toEqual(customAgent);
+  });
+
+  it("validates skill IDs using the same safe slug rules", () => {
+    expect(validateSkillId("testing")).toBe("testing");
+    expect(validateSkillId("linting-tools")).toBe("linting-tools");
+    expect(() => validateSkillId("")).toThrow(/skill|habilidad|invalid/i);
+    expect(() => validateSkillId("bad value")).toThrow(/skill|habilidad|invalid/i);
+    expect(() => validateSkillId("../escape")).toThrow(/skill|habilidad|invalid/i);
+  });
+
   it("parses the minimal registry without suite or profile state", () => {
     expect(() => validateAgentId("../escape")).toThrow();
     expect(parseSuiteConfig({ version: 1, customAgents: {} })).toEqual({ version: 1, customAgents: {}, modelAssignments: {}, variantAssignments: {} });
@@ -90,5 +164,45 @@ describe("suite config", () => {
       suites: { default: { agents: {} } },
       customAgents: {},
     })).toEqual({ version: 1, customAgents: {}, modelAssignments: {}, variantAssignments: {} });
+  });
+
+  it("normalizes validated base overrides and disabled agent ids without changing legacy output", () => {
+    expect(parseSuiteConfig({
+      version: 1,
+      customAgents: { "local-helper": customAgent },
+      modelAssignments: { general: "openai/assigned" },
+      variantAssignments: { general: "high" },
+      baseOverrides: {
+        general: { description: "A safer general agent", skills: ["testing"], operations: "Use the requested tools." },
+      },
+      disabledAgents: ["general", "general"],
+    })).toEqual({
+      version: 1,
+      customAgents: { "local-helper": customAgent },
+      modelAssignments: { general: "openai/assigned" },
+      variantAssignments: { general: "high" },
+      baseOverrides: {
+        general: { description: "A safer general agent", skills: ["testing"], operations: "Use the requested tools." },
+      },
+      disabledAgents: ["general"],
+    });
+  });
+
+  it("validates override ownership and rejects prototype-pollution keys", () => {
+    expect(() => parseSuiteConfig({
+      version: 1,
+      customAgents: { "local-helper": customAgent },
+      baseOverrides: { "local-helper": { description: "not a base agent" } },
+    })).toThrow(/base|seed|sistema|agent/i);
+    expect(() => parseSuiteConfig({
+      version: 1,
+      customAgents: {},
+      disabledAgents: ["__proto__"],
+    })).toThrow(/id|identificador|invalid/i);
+    expect(() => parseSuiteConfig({
+      version: 1,
+      customAgents: {},
+      baseOverrides: { general: { skills: ["bad value"] } },
+    })).toThrow(/skill|habilidad|invalid/i);
   });
 });

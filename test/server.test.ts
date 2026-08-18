@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { INTERNAL_AGENT_ALLOWLIST, transformTaskPermission } from "../src/core/policy.ts";
@@ -197,6 +197,7 @@ describe("server adapter", () => {
         },
       });
       const config = {
+        permission: {},
         model: "openai/root-model",
         agent: {
           general: { model: "openai/old-general", variant: "old" },
@@ -218,6 +219,97 @@ describe("server adapter", () => {
         general: "openai/assigned-general",
         "agent-especialit-github": "openai/assigned-github",
       });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("removes disabled agents from runtime config and applies safe base overrides", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agent-suite-runtime-disabled-"));
+    vi.stubEnv("HOME", home);
+    vi.stubEnv("USERPROFILE", home);
+    try {
+      saveSuiteConfig(defaultSuitePath(), {
+        version: 1,
+        customAgents: {},
+        modelAssignments: { "agent-especialit-github": "openai/assigned-github" },
+        variantAssignments: { "agent-especialit-github": "high" },
+        baseOverrides: { "agent-especialit-github": { description: "Edited GitHub", skills: ["testing"], operations: "Use GitHub safely." } },
+        disabledAgents: ["general"],
+      });
+      const config = {
+        permission: {},
+        agent: {
+          general: { model: "openai/general", description: "General" },
+          "agent-especialit-github": { model: "openai/old-github", description: "Old GitHub", prompt: "Old prompt" },
+        },
+      };
+      const hooks = await serverPlugin({} as never);
+      await hooks.config?.(config as never);
+
+      expect(config.agent.general).toBeUndefined();
+      expect(config.agent["agent-especialit-github"]).toMatchObject({ model: "openai/assigned-github", variant: "high", description: "Edited GitHub", prompt: "Use GitHub safely.", skills: ["testing"] });
+      expect((config.permission as { task?: Record<string, string> }).task?.general).toBe("deny");
+
+      await hooks["chat.message"]?.({ sessionID: "disabled", agent: "gentle-orchestrator", messageID: "m1" }, {
+        message: { id: "m1", agent: "gentle-orchestrator" } as never,
+        parts: [{ type: "text", text: "usa también agente: general" }] as never,
+      });
+      await expect(hooks["tool.execute.before"]?.({ tool: "task", sessionID: "disabled", callID: "c1" }, { args: { subagent_type: "general" } })).rejects.toThrow(/disabled|desactiv/i);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("rejects explicit current-turn grants for a disabled target even when the ledger contains one", async () => {
+    const hooks = createAgentSuiteServer({ knownAgents: () => ["general"], disabledAgents: () => ["general"] });
+    await hooks["chat.message"]({ sessionID: "s", agent: "gentle-orchestrator", messageID: "m1" }, { message: { id: "m1", agent: "gentle-orchestrator" } as never, parts: [{ type: "text", text: "usa también agente: general" }] as never });
+    await expect(hooks["tool.execute.before"]({ tool: "task", sessionID: "s", callID: "c1" }, { args: { subagent_type: "general" } })).rejects.toThrow(/disabled|desactiv/i);
+  });
+
+  it("reloads deactivation and reactivation for the live server session", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agent-suite-live-disabled-"));
+    vi.stubEnv("HOME", home);
+    vi.stubEnv("USERPROFILE", home);
+    try {
+      saveSuiteConfig(defaultSuitePath(), { version: 1, customAgents: {}, modelAssignments: {}, variantAssignments: {} });
+      const hooks = await serverPlugin({} as never);
+      await hooks.config?.({ permission: {}, agent: { general: {} } } as never);
+
+      const enabled = { message: { id: "m1", agent: "gentle-orchestrator" }, parts: [{ type: "text", text: "usa también agente: general" }] } as never;
+      await hooks["chat.message"]?.({ sessionID: "live", messageID: "m1" }, enabled);
+      expect((enabled as { parts: Array<Record<string, unknown>> }).parts).toContainEqual(expect.objectContaining({ type: "agent", name: "general" }));
+
+      saveSuiteConfig(defaultSuitePath(), { version: 1, customAgents: {}, modelAssignments: {}, variantAssignments: {}, disabledAgents: ["general"] });
+      const disabled = { message: { id: "m2", agent: "gentle-orchestrator" }, parts: [{ type: "text", text: "usa también agente: general" }] } as never;
+      await hooks["chat.message"]?.({ sessionID: "live", messageID: "m2" }, disabled);
+      expect((disabled as { parts: Array<Record<string, unknown>> }).parts.some((part) => part.type === "agent")).toBe(false);
+      await expect(hooks["tool.execute.before"]?.({ tool: "task", sessionID: "live", callID: "c2" }, { args: { subagent_type: "general" } })).rejects.toThrow(/disabled|desactiv/i);
+
+      saveSuiteConfig(defaultSuitePath(), { version: 1, customAgents: {}, modelAssignments: {}, variantAssignments: {} });
+      const reactivated = { message: { id: "m3", agent: "gentle-orchestrator" }, parts: [{ type: "text", text: "usa también agente: general" }] } as never;
+      await hooks["chat.message"]?.({ sessionID: "live", messageID: "m3" }, reactivated);
+      expect((reactivated as { parts: Array<Record<string, unknown>> }).parts).toContainEqual(expect.objectContaining({ type: "agent", name: "general" }));
+      await expect(hooks["tool.execute.before"]?.({ tool: "task", sessionID: "live", callID: "c3" }, { args: { subagent_type: "general" } })).resolves.toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("fails closed on a corrupt live suite reload and recovers after repair", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agent-suite-live-corrupt-"));
+    vi.stubEnv("HOME", home);
+    vi.stubEnv("USERPROFILE", home);
+    try {
+      saveSuiteConfig(defaultSuitePath(), { version: 1, customAgents: {}, modelAssignments: {}, variantAssignments: {} });
+      const hooks = await serverPlugin({} as never);
+      await hooks.config?.({ permission: {}, agent: { general: {} } } as never);
+      writeFileSync(defaultSuitePath(), "{\"broken\":", "utf8");
+
+      const corrupt = { message: { id: "m1", agent: "gentle-orchestrator" }, parts: [{ type: "text", text: "usa también agente: general" }] } as never;
+      await hooks["chat.message"]?.({ sessionID: "corrupt", messageID: "m1" }, corrupt);
+      expect((corrupt as { parts: Array<Record<string, unknown>> }).parts).toEqual([{ type: "text", text: "usa también agente: general" }]);
+      await expect(hooks["tool.execute.before"]?.({ tool: "task", sessionID: "corrupt", callID: "c1" }, { args: { subagent_type: "general" } })).rejects.toThrow(/suite config/i);
     } finally {
       vi.unstubAllEnvs();
     }
