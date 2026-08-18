@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { initialNavState, reduceNav, type NavState } from "../src/tui/agent-suite-nav.ts";
-import { DeleteWarning, deleteConfirmationOptions } from "../src/tui/screens/delete-warning.tsx";
+import { DeleteWarning, deleteConfirmationOptions, deleteWarningPresentation } from "../src/tui/screens/delete-warning.tsx";
 import { confirmDelete, cancelDelete } from "../src/tui/agent-suite-app.tsx";
 import type { AgentSuiteController } from "../src/tui/agent-suite-controller.ts";
 
@@ -40,5 +40,15 @@ describe("Agent Suite delete warning", () => {
     expect(fake.calls).toEqual(["delete"]);
     expect(dispatch).not.toHaveBeenCalled();
     expect(reduceNav(reduceNav(base, { type: "REQUEST_DELETE", agentId: "custom" }), { type: "CONFIRM_DELETE" }).stack).toHaveLength(2);
+  });
+
+  it("presents a semantic warning with marked confirm and cancel rows", () => {
+    expect(deleteWarningPresentation(0)).toEqual({
+      status: "warning",
+      options: [
+        { label: "Eliminar", selected: true },
+        { label: "Cancelar", selected: false },
+      ],
+    });
   });
 });

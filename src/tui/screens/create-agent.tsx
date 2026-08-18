@@ -1,6 +1,7 @@
 import type { JSX } from "@opentui/solid";
 import type { TuiTheme } from "@opencode-ai/plugin/tui";
 import type { CreateDraft } from "../agent-suite-nav.ts";
+import { Divider, FieldRow, SectionPanel, StatusBadge } from "../visual-primitives.tsx";
 
 export const CREATE_FIELDS: readonly (keyof CreateDraft)[] = ["id", "description", "skills", "operations", "model", "effort"];
 
@@ -50,18 +51,35 @@ const LABELS: Record<keyof CreateDraft, string> = {
   effort: "Esfuerzo",
 };
 
+export interface CreateStepPresentation {
+  heading: string;
+  label: string;
+  value: string;
+}
+
+export function createStepPresentation(draft: CreateDraft, step: 0 | 1 | 2 | 3 | 4 | 5): CreateStepPresentation {
+  const field = CREATE_FIELDS[step];
+  const label = LABELS[field];
+  const value = field === "skills" ? draft.skills.join(", ") : draft[field];
+  return {
+    heading: `Paso ${step + 1}/6 · ${label}${["id", "description", "model", "effort"].includes(field) ? " · obligatorio" : ""}`,
+    label,
+    value,
+  };
+}
+
 export function CreateAgent(props: CreateAgentProps): JSX.Element {
-  const colors = () => props.theme.current;
   const field = () => CREATE_FIELDS[props.step];
-  const value = () => field() === "skills" ? props.draft.skills.join(", ") : props.draft[field()] as string;
-  const required = () => ["id", "description", "model", "effort"].includes(field());
+  const presentation = () => createStepPresentation(props.draft, props.step);
   const submit = (next: string) => props.onInput(field(), field() === "skills" ? next.split(",").map((skill) => skill.trim()).filter(Boolean) : next);
   return (
     <box flexDirection="column" gap={1}>
-      <text fg={colors().textMuted}>Paso {props.step + 1}/6 · {LABELS[field()]}{required() ? " · obligatorio" : ""}</text>
-      <input focused value={value()} placeholder={LABELS[field()]} onInput={submit} onSubmit={(next) => { if (typeof next === "string") submit(next); props.step === 5 ? props.onSubmit() : props.onNext(); }} />
-      {props.error ? <text fg={colors().error}>{props.error}</text> : null}
-      <text fg={colors().textMuted}>Enter continuar · Esc volver</text>
+      <SectionPanel theme={props.theme} title={presentation().heading}>
+        <FieldRow theme={props.theme} label="Campo" value={presentation().label} />
+        <input focused value={presentation().value} placeholder={presentation().label} onInput={submit} onSubmit={(next) => { if (typeof next === "string") submit(next); props.step === 5 ? props.onSubmit() : props.onNext(); }} />
+      </SectionPanel>
+      <Divider theme={props.theme} />
+      {props.error ? <StatusBadge theme={props.theme} status="error">{props.error}</StatusBadge> : null}
     </box>
   );
 }

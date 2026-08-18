@@ -3,7 +3,7 @@ import { reduceNav, type NavState } from "../src/tui/agent-suite-nav.ts";
 import { eventForKey } from "../src/tui/agent-suite-app.tsx";
 import type { KeyEvent } from "@opencode-ai/plugin/tui";
 import { advanceCreateDraft, applyCreateSubmission } from "../src/tui/agent-suite-app.tsx";
-import { createDraftFields, validateCreateDraft, validateCreateStep } from "../src/tui/screens/create-agent.tsx";
+import { createDraftFields, createStepPresentation, validateCreateDraft, validateCreateStep } from "../src/tui/screens/create-agent.tsx";
 import type { CreateDraft } from "../src/tui/agent-suite-nav.ts";
 import { createAgentSuiteController } from "../src/tui/agent-suite-controller.ts";
 import type { AgentSuiteController } from "../src/tui/agent-suite-controller.ts";
@@ -82,5 +82,18 @@ describe("Agent Suite create agent", () => {
     const previous = reduceNav(final, { type: "CREATE_PREV" });
 
     expect(previous.stack.at(-1)).toMatchObject({ kind: "create", step: 4, draft: { id: draft.id, model: draft.model } });
+  });
+
+  it("describes each wizard step with the preserved field value", () => {
+    expect(createStepPresentation(draft, 0)).toEqual({
+      heading: "Paso 1/6 · Identificador · obligatorio",
+      label: "Identificador",
+      value: "review-agent",
+    });
+    expect(createStepPresentation(draft, 2)).toEqual({
+      heading: "Paso 3/6 · Skills",
+      label: "Skills",
+      value: "testing",
+    });
   });
 });
