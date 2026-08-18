@@ -112,6 +112,20 @@ export async function applyEffortSelection(controller: AgentSuiteController, age
   } finally { setBusy?.(false); }
 }
 
+export async function handleSelectionKey(key: KeyEvent, event: NavEvent, agentId: string, controller: AgentSuiteController, dispatch: (event: NavEvent) => void, setError: (error?: string) => void, setBusy?: (busy: boolean) => void): Promise<boolean> {
+  if (!isSubmitKey(key) || (event.type !== "SELECT_MODEL" && event.type !== "SELECT_EFFORT")) return false;
+  key.preventDefault();
+  key.stopPropagation();
+  setError(undefined);
+  try {
+    if (event.type === "SELECT_MODEL") await applyModelSelection(controller, agentId, event.model, dispatch, setBusy);
+    else await applyEffortSelection(controller, agentId, event.effort, dispatch, setBusy);
+  } catch (error) {
+    setError(error instanceof Error ? error.message : String(error));
+  }
+  return true;
+}
+
 export function normalizeCatalogState(state: NavState, rows: readonly Pick<import("../core/types.ts").AgentCatalogRow, "id">[]): NavState {
   return {
     ...state,
@@ -139,6 +153,24 @@ export async function confirmDelete(controller: AgentSuiteController, agentId: s
 
 export async function cancelDelete(_controller: AgentSuiteController, _agentId: string, dispatch: (event: NavEvent) => void): Promise<void> {
   dispatch({ type: "CANCEL_DELETE" });
+}
+
+export async function handleDeleteKey(key: KeyEvent, screen: AppScreen, controller: AgentSuiteController, dispatch: (event: NavEvent) => void, setError: (error?: string) => void, setBusy?: (busy: boolean) => void): Promise<boolean> {
+  if (screen.kind !== "delete" || !isSubmitKey(key)) return false;
+  key.preventDefault();
+  key.stopPropagation();
+  setError(undefined);
+  if (screen.confirmFocus === 1) {
+    await cancelDelete(controller, screen.agentId, dispatch);
+    return true;
+  }
+  setBusy?.(true);
+  try {
+    setError(await confirmDelete(controller, screen.agentId, dispatch));
+  } finally {
+    setBusy?.(false);
+  }
+  return true;
 }
 
 export async function applyInlineEdit(controller: AgentSuiteController, agentId: string, screen: AppScreen, dispatch: (event: NavEvent) => void): Promise<string | undefined> {
