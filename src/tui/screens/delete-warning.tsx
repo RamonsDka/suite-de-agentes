@@ -26,12 +26,7 @@ export function DeleteWarning(props: DeleteWarningProps): JSX.Element {
       <StatusBadge theme={props.theme} status="warning">¿Eliminar el agente personalizado {props.row.id}?</StatusBadge>
       <text fg={props.theme.current.textMuted}>Esta acción modifica la configuración persistida.</text>
       <Divider theme={props.theme} />
-      {deleteWarningPresentation(props.focus).options.map(({ label, selected }, index) => <SelectableRow theme={props.theme} selected={selected} onMouseDown={(event) => {
-        if (event.button !== 0) return;
-        event.preventDefault();
-        event.stopPropagation();
-        if (index === 0) props.onConfirm(); else props.onCancel();
-      }}>{label}</SelectableRow>)}
+      {deleteWarningPresentation(props.focus).options.map(({ label, selected }, index) => <SelectableRow theme={props.theme} selected={selected} onActivate={() => { if (index === 0) props.onConfirm(); else props.onCancel(); }}>{label}</SelectableRow>)}
       {props.error ? <StatusBadge theme={props.theme} status="error">{props.error}</StatusBadge> : null}
     </box>
   );

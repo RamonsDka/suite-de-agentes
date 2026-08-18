@@ -8,6 +8,7 @@ import { PLUGIN_VERSION } from "../version.ts";
 import { safeHostAction, safeSlotRender } from "./host-compat.ts";
 import { createAgentSuiteController, type AgentSuiteController } from "./agent-suite-controller.ts";
 import { handleAgentSuiteEscape, mountAgentSuite } from "./agent-suite-mount.tsx";
+import { formatCatalogName } from "./visual-tokens.ts";
 
 export const AGENT_SUITE_COMMAND = ":agent-suite";
 export const AGENT_SUITE_ESCAPE_COMMAND = "agent-suite.escape";
@@ -33,7 +34,7 @@ function catalogState(row: AgentCatalogRow): string {
 }
 
 export function buildCatalogOptions(rows: readonly AgentCatalogRow[]): TuiDialogSelectOption<string>[] {
-  return rows.map((row) => ({ title: row.id, value: row.id, description: `${catalogState(row)} · ${row.model ?? "modelo pendiente"} · ${row.variant ?? "default"}` }));
+  return rows.map((row) => ({ title: formatCatalogName(row.id), value: row.id }));
 }
 
 export function catalogDetailMessage(row: AgentCatalogRow, customAgent?: CustomAgent): string {
@@ -49,7 +50,7 @@ export function buildCatalogActionOptions(row: AgentCatalogRow): TuiDialogSelect
 }
 
 export function buildAgentModelOptions(row: AgentCatalogRow, options: readonly { title: string; value: string; description?: string }[]): TuiDialogSelectOption<string>[] {
-  return options.map((option) => option.value === row.model ? { ...option, title: `✓ ${option.title}`, description: `${option.description ? `${option.description} · ` : ""}Modelo actual` } : option);
+  return options.map((option) => ({ ...option }));
 }
 
 export function buildRuntimeModelOptions(api: TuiPluginApi): TuiDialogSelectOption<string>[] {
