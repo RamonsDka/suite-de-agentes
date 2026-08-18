@@ -7,6 +7,7 @@ import { validateSkillId } from "../../core/config.ts";
 import { editorFields, modifyOptions, type EditorField, truncate } from "../agent-suite-vm.ts";
 import type { ModifyEdit } from "../agent-suite-nav.ts";
 import { Divider, FieldRow, SectionPanel, SelectableRow, StatusBadge } from "../visual-primitives.tsx";
+import { editorSaveStatus } from "./ai-preview.tsx";
 
 export interface ModifyPanelProps {
   theme: TuiTheme;
@@ -83,6 +84,10 @@ export function validateSkillInput(value: string, existing: readonly string[]): 
   return undefined;
 }
 
+export function modifyFinalizationStatus(edit: ModifyEdit): ReturnType<typeof editorSaveStatus> {
+  return editorSaveStatus(edit.mode !== "menu");
+}
+
 export function syncDraftInput(value: string, setLocal: (value: string) => void): void {
   setLocal(value);
 }
@@ -131,6 +136,7 @@ export function ModifyPanel(props: ModifyPanelProps): JSX.Element {
          props.onSkillAdd?.(submitted);
        }} /> : null}
       </SectionPanel>
+      <StatusBadge theme={props.theme} status={modifyFinalizationStatus(edit()).status}>{modifyFinalizationStatus(edit()).label}</StatusBadge>
       {props.busy ? <StatusBadge theme={props.theme} status="info">Guardando cambios…</StatusBadge> : null}
       {props.error ? <StatusBadge theme={props.theme} status="error">{props.error}</StatusBadge> : null}
     </box>
