@@ -32,6 +32,7 @@ function controller(): AgentSuiteController & { calls: string[]; submitted?: Cre
     setEffort: async () => { calls.push("effort"); },
     setSkills: async () => { calls.push("skills"); },
     setOperations: async () => { calls.push("operations"); },
+    patchAgent: async () => undefined,
   };
 }
 
@@ -59,6 +60,15 @@ describe("Agent Suite create agent", () => {
     expect(dispatch).toHaveBeenCalledWith({ type: "CREATE_SUBMIT" });
   });
 
+  it("trims a valid padded id before persisting the draft", async () => {
+    const fake = controller();
+    const dispatch = vi.fn();
+    const error = await applyCreateSubmission(fake, { ...draft, id: ` ${draft.id} ` }, dispatch);
+
+    expect(error).toBeUndefined();
+    expect(fake.submitted?.id).toBe(draft.id);
+  });
+
   it("rejects empty required fields before any controller operation", () => {
     expect(createDraftFields()).toEqual(["id", "description", "skills", "operations", "model", "effort"]);
     expect(validateCreateDraft({ ...draft, id: "" })).toBe("El identificador es obligatorio.");
@@ -82,6 +92,14 @@ describe("Agent Suite create agent", () => {
     const previous = reduceNav(final, { type: "CREATE_PREV" });
 
     expect(previous.stack.at(-1)).toMatchObject({ kind: "create", step: 4, draft: { id: draft.id, model: draft.model } });
+  });
+
+  it("leaves the completed wizard on the catalog instead of allowing duplicate Enter submits", () => {
+    const final = { ...createState, stack: [...createState.stack.slice(0, -1), { kind: "create" as const, step: 5 as const, draft, focus: 0 }] };
+    const completed = reduceNav(final, { type: "CREATE_SUBMIT" });
+
+    expect(completed.stack.at(-1)).toMatchObject({ kind: "catalog", page: 0, focus: 0, searchFocused: false });
+    expect(completed.stack.some((screen) => screen.kind === "create")).toBe(false);
   });
 
   it("describes each wizard step with the preserved field value", () => {
