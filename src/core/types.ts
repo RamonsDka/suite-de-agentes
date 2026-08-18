@@ -12,11 +12,19 @@ export interface CustomAgent {
   materializeGlobal?: boolean;
 }
 
+export interface BaseAgentOverride {
+  description?: string;
+  skills?: string[];
+  operations?: string;
+}
+
 export interface SuiteConfig {
   version: 1;
   customAgents: Record<string, CustomAgent>;
   modelAssignments: Record<string, string>;
   variantAssignments: Record<string, string>;
+  baseOverrides?: Record<string, BaseAgentOverride>;
+  disabledAgents?: string[];
 }
 
 export interface AgentCatalogRow {
@@ -28,6 +36,8 @@ export interface AgentCatalogRow {
   consent: "explicit-current-turn";
   description?: string;
   variant?: string;
+  disabled?: boolean;
+  operations?: string;
 }
 
 export interface RuntimeMessage { sessionID: string; messageID: string; role?: string; parts?: unknown[]; text?: string; }

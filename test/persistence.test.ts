@@ -82,4 +82,18 @@ describe("namespace persistence", () => {
     });
     expect(loadSuiteConfig(path).variantAssignments).toEqual({ "agent-especialit-github": "medium" });
   });
+
+  it("round-trips optional base overrides and disabled agents while preserving v1", () => {
+    const path = suitePath();
+    const value = {
+      ...minimal,
+      baseOverrides: { general: { description: "Edited", skills: ["testing"], operations: "Be precise." } },
+      disabledAgents: ["general"],
+    };
+
+    saveSuiteConfig(path, value);
+
+    expect(loadSuiteConfig(path)).toEqual(value);
+    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual(value);
+  });
 });
