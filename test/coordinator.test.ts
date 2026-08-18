@@ -24,11 +24,18 @@ describe("coordinator authoring", () => {
 
   it("parses only complete safe drafts and normalizes compatible values", () => {
     expect(parseAgentDraft(response)).toEqual({
-      id: "review-agent", description: "Reviews pull requests", systemPrompt: "Review changes carefully.", operations: "Explain risks and next steps.", model: "openai/gpt-5", effort: "high", skills: ["testing", "github"], permissions: { read: "allow", edit: "ask" },
+      id: "review-agent",
+      description: "Reviews pull requests",
+      systemPrompt: "Review changes carefully.",
+      operations: "Explain risks and next steps.",
+      model: "openai/gpt-5",
+      effort: "high",
+      skills: ["testing", "github"],
+      permissions: { read: "allow", edit: "ask" },
     });
     expect(() => parseAgentDraft(JSON.stringify({ id: "review-agent" }))).toThrow(/strict/i);
     expect(() => parseAgentDraft(response.replace('"id"', '"unexpected"'))).toThrow(/strict/i);
-    expect(() => parseAgentDraft(response.replace(" review-agent ", " ../unsafe "))).toThrow(/agent id/i);
+    expect(() => parseAgentDraft(response.replace(' review-agent ', ' ../unsafe '))).toThrow(/agent id/i);
   });
 
   it("surfaces progress and never returns a preview after cancellation", async () => {
