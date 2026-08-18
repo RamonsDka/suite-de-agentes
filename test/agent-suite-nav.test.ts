@@ -15,6 +15,7 @@ import {
 import { landingMouseActivation, landingRows } from "../src/tui/screens/landing.tsx";
 import { coordinatorEffortOptions, coordinatorModelOptions, coordinatorProviderOptions, coordinatorSelectionOptions, coordinatorStatus } from "../src/tui/screens/coordinator-config.tsx";
 import { applyCoordinatorSelection, eventForKey, handleCoordinatorSelectionKey } from "../src/tui/agent-suite-app.tsx";
+import { skillPickerRows } from "../src/tui/screens/skill-picker.tsx";
 
 const seed = { id: "general", membership: "seed" as const, enabled: true, skills: [], consent: "explicit-current-turn" as const };
 const custom = { ...seed, id: "custom", membership: "custom" as const };
@@ -134,10 +135,10 @@ describe("Agent Suite navigation", () => {
   });
 
   it("maps every WU1 screen title and bounds catalog rows", () => {
-    const kinds: AppScreen["kind"][] = ["landing", "catalog", "info", "modify", "model", "effort", "delete", "create", "coordinator"];
+    const kinds: AppScreen["kind"][] = ["landing", "catalog", "info", "modify", "model", "effort", "delete", "create", "coordinator", "skill-picker"];
     expect(kinds.map((kind) => screenTitle({ kind } as AppScreen))).toEqual([
       "SUITE DE AGENTES — v1.0.1", "CATALOGO DE AGENTES", "INFO DEL AGENTE", "MODIFICAR AGENTE",
-      "SELECCIONAR EL MODELO DE IA", "SELECCIONAR NIVEL DE ESFUERZO", "ADVERTENCIA", "CREAR AGENTE — v1.0.1", "CONFIGURACIÓN DEL COORDINADOR",
+      "SELECCIONAR EL MODELO DE IA", "SELECCIONAR NIVEL DE ESFUERZO", "ADVERTENCIA", "CREAR AGENTE — v1.0.1", "CONFIGURACIÓN DEL COORDINADOR", "SELECCIONAR SKILLS",
     ]);
     expect(pageRows(Array.from({ length: 8 }, (_, index) => index), 1)).toEqual([6, 7]);
     expect(MAX_VISIBLE_ROWS).toBe(6);
@@ -189,6 +190,19 @@ describe("Agent Suite navigation", () => {
     expect((moved.stack.at(-1) as any).edit.focus).toBe(1);
     expect(draftBack.stack.at(-1)).toMatchObject({ kind: "modify", edit: { mode: "menu" } });
     expect(screenBack.stack.at(-1)).toMatchObject({ kind: "info", agentId: custom.id });
+  });
+
+  it("opens a searchable installed-skill picker and returns its selected assignment to the skills draft", () => {
+    const menu = reduceNav(infoState(custom.id), { type: "OPEN_MODIFY", agentId: custom.id, custom: true });
+    const skills = reduceNav(menu, { type: "MODIFY_ACTIVATE", option: "skills", skills: ["testing"] });
+    const picker = reduceNav(skills, { type: "OPEN_SKILL_PICKER", installed: [{ id: "github", name: "GitHub", description: "Git hosting", source: "installed" }] });
+    const searching = reduceNav(picker, { type: "SKILL_PICKER_QUERY", value: "hub" });
+    const attached = reduceNav(searching, { type: "SKILL_PICKER_TOGGLE", skill: "github" });
+
+    expect(picker.stack.at(-1)).toMatchObject({ kind: "skill-picker", agentId: custom.id, query: "", selected: ["testing"] });
+    expect(searching.stack.at(-1)).toMatchObject({ kind: "skill-picker", query: "hub" });
+    expect(skillPickerRows((searching.stack.at(-1) as any).installed, "hub", ["testing"])).toEqual([{ id: "github", label: "GitHub", description: "Git hosting", attached: false }]);
+    expect(attached.stack.at(-1)).toMatchObject({ kind: "modify", agentId: custom.id, edit: { mode: "skills", skills: ["testing", "github"] } });
   });
 });
 

@@ -10,6 +10,7 @@ import { safeHostAction, safeSlotRender } from "./host-compat.ts";
 import { createAgentSuiteController, type AgentSuiteController } from "./agent-suite-controller.ts";
 import { handleAgentSuiteEscape, mountAgentSuite } from "./agent-suite-mount.tsx";
 import { formatCatalogName } from "./visual-tokens.ts";
+import { discoverInstalledSkills } from "./ai/skill-sources.ts";
 
 export const AGENT_SUITE_COMMAND = ":agent-suite";
 export const AGENT_SUITE_ESCAPE_COMMAND = "agent-suite.escape";
@@ -104,7 +105,7 @@ function openNativeFallback(api: Pick<TuiPluginApi, "ui">): void {
 export function openAgentSuite(api: TuiPluginApi, fallback: SuiteOpenFallback = () => openNativeFallback(api)): void {
   const opened = safeHostAction("open Agent Suite", () => {
     const runtimeModels = buildRuntimeModelOptions(api);
-    mountAgentSuite({ theme: api.theme, ui: api.ui, modelOptions: (row) => buildAgentModelOptions(row, runtimeModels), variantOptions: (row, model) => buildAgentVariantOptions(row, model, getAvailableModelVariants(api, model)), coordinatorProviders: buildRuntimeCoordinatorProviders(api) }, controllerFactory(api));
+    mountAgentSuite({ theme: api.theme, ui: api.ui, modelOptions: (row) => buildAgentModelOptions(row, runtimeModels), variantOptions: (row, model) => buildAgentVariantOptions(row, model, getAvailableModelVariants(api, model)), coordinatorProviders: buildRuntimeCoordinatorProviders(api), installedSkills: () => discoverInstalledSkills(api.client) }, controllerFactory(api));
     return true;
   }, false);
   if (!opened) fallback();

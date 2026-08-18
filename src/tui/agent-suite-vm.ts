@@ -30,6 +30,7 @@ export function screenTitle(screen: Pick<AppScreen, "kind"> & { disabled?: boole
     case "delete": return "ADVERTENCIA";
     case "create": return `CREAR AGENTE — v${PLUGIN_VERSION}`;
     case "coordinator": return "CONFIGURACIÓN DEL COORDINADOR";
+    case "skill-picker": return "SELECCIONAR SKILLS";
   }
 }
 

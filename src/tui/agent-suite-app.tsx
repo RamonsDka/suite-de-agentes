@@ -23,6 +23,8 @@ import type { CreateDraft, AppScreen } from "./agent-suite-nav.ts";
 import { screenKeyHints, screenKeyHintsForScreen, selectionErrorPresentation, StatusBadge } from "./visual-primitives.tsx";
 import { validateSkillInput } from "./screens/modify-panel.tsx";
 import { isSubmitKey } from "./key-handling.ts";
+import { SkillPicker } from "./screens/skill-picker.tsx";
+import type { SkillCandidate } from "../core/skill-catalog.ts";
 
 export interface AgentSuiteAppProps {
   theme: TuiTheme;
@@ -32,6 +34,7 @@ export interface AgentSuiteAppProps {
   modelOptions?: (row: import("../core/types.ts").AgentCatalogRow) => readonly TuiDialogSelectOption<string>[];
   variantOptions?: (row: import("../core/types.ts").AgentCatalogRow, model: string) => readonly TuiDialogSelectOption<string>[];
   coordinatorProviders?: readonly RuntimeCoordinatorProvider[];
+  installedSkills?: () => Promise<readonly SkillCandidate[]>;
 }
 
 export async function applyBaseDeactivation(controller: AgentSuiteController, agentId: string, dispatch: (event: NavEvent) => void): Promise<string | undefined> {
@@ -97,14 +100,14 @@ function eventForKey(key: KeyEvent, state: NavState, catalogRowCount = 0, focuse
     if (screen.kind === "modify" && (screen.edit.mode === "text" || screen.edit.mode === "operations" || screen.edit.mode === "skills" && screen.edit.adding)) return undefined;
     return screen.kind === "landing" ? { type: "REQUEST_CLOSE" } : { type: "BACK" };
   }
-  const ownsKeyboardInput = screen.kind === "catalog" && screen.searchFocused === true
+  const ownsKeyboardInput = screen.kind === "catalog" && screen.searchFocused === true || screen.kind === "skill-picker"
     || screen.kind === "modify" && screen.edit.mode !== "menu"
     || screen.kind === "create";
   if (key.name === "f10") return ownsKeyboardInput ? undefined : { type: "REQUEST_CLOSE" };
   if (screen.kind === "catalog" && screen.searchFocused) {
     return undefined;
   }
-  if (screen.kind === "create" || screen.kind === "modify" && (screen.edit.mode === "text" || screen.edit.mode === "operations" || screen.edit.mode === "skills" && screen.edit.adding)) return undefined;
+  if (screen.kind === "create" || screen.kind === "skill-picker" || screen.kind === "modify" && (screen.edit.mode === "text" || screen.edit.mode === "operations" || screen.edit.mode === "skills" && screen.edit.adding)) return undefined;
   if (key.name === "/" && screen.kind === "catalog") return { type: "FOCUS_CATALOG_SEARCH" };
   if (key.name === "f2") return { type: "ACTIVATE_LANDING_ITEM", index: 0 };
   if (key.name === "f3") return { type: "ACTIVATE_LANDING_ITEM", index: 1 };
@@ -466,7 +469,8 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
            const catalogSource = current.kind === "info" || current.kind === "modify" || current.kind === "model" || current.kind === "effort" || current.kind === "delete" ? (current as { agentId: string }).agentId : undefined;
            const row = catalogSource ? [...snapshot().rows, ...(snapshot().disabledRows ?? [])].find((item) => item.id === catalogSource) : undefined;
            if (current.kind === "info") return row ? <AgentInfo theme={props.theme} row={row} operations={props.controller.operations?.(row.id)} focus={current.focus} onModify={() => dispatch({ type: "OPEN_MODIFY", agentId: row.id, custom: row.membership === "custom" })} onDelete={() => { if (row.membership === "custom") dispatch({ type: "REQUEST_DELETE", agentId: row.id }); }} onDeactivate={() => dispatch({ type: "DEACTIVATE_AGENT", agentId: row.id })} onReactivate={() => dispatch({ type: "REACTIVATE_AGENT", agentId: row.id })} onBack={() => dispatch({ type: "BACK" })} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>;
-           if (current.kind === "modify") return row ? <ModifyPanel theme={props.theme} row={row} protectedBase={current.protectedBase} operations={props.controller.operations?.(row.id)} focus={current.focus} edit={current.edit} busy={busy()} error={operationError()} onActivate={(option) => { setOperationError(undefined); dispatch({ type: "MODIFY_ACTIVATE", option, skills: row.skills, operations: props.controller.operations?.(row.id) ?? "", value: option === "id" ? row.id : option === "description" ? row.description ?? "" : undefined }); }} onToggleSkill={(index, skill) => dispatch({ type: "EDIT_SKILLS_TOGGLE", index, skill })} onStartSkillAdd={() => dispatch({ type: "EDIT_SKILLS_START_ADD" })} onSkillAdd={(value?: string) => runInlineEdit(current, value)} onCommit={(value?: string) => runInlineEdit(current, value)} onCancel={() => { setOperationError(undefined); dispatch({ type: "EDIT_CANCEL" }); }} onBack={() => { setOperationError(undefined); dispatch({ type: "BACK" }); }} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>;
+        if (current.kind === "skill-picker") return <SkillPicker theme={props.theme} installed={current.installed} selected={current.selected} query={current.query} focus={current.focus} onQuery={(value) => dispatch({ type: "SKILL_PICKER_QUERY", value })} onToggle={(skill) => dispatch({ type: "SKILL_PICKER_TOGGLE", skill })} />;
+        if (current.kind === "modify") return row ? <ModifyPanel theme={props.theme} row={row} protectedBase={current.protectedBase} operations={props.controller.operations?.(row.id)} focus={current.focus} edit={current.edit} busy={busy()} error={operationError()} onActivate={(option) => { setOperationError(undefined); dispatch({ type: "MODIFY_ACTIVATE", option, skills: row.skills, operations: props.controller.operations?.(row.id) ?? "", value: option === "id" ? row.id : option === "description" ? row.description ?? "" : undefined }); }} onToggleSkill={(index, skill) => dispatch({ type: "EDIT_SKILLS_TOGGLE", index, skill })} onStartSkillAdd={() => { if (!props.installedSkills) return dispatch({ type: "EDIT_SKILLS_START_ADD" }); setOperationError(undefined); setBusy(true); void props.installedSkills().then((installed) => dispatch({ type: "OPEN_SKILL_PICKER", installed })).catch((error) => setOperationError(operationErrorMessage(error))).finally(() => setBusy(false)); }} onSkillAdd={(value?: string) => runInlineEdit(current, value)} onCommit={(value?: string) => runInlineEdit(current, value)} onCancel={() => { setOperationError(undefined); dispatch({ type: "EDIT_CANCEL" }); }} onBack={() => { setOperationError(undefined); dispatch({ type: "BACK" }); }} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>;
           if (current.kind === "model") { const options = row ? props.modelOptions?.(row) ?? [] : []; const error = selectionErrorPresentation(operationError()); return row ? <ModelSelect theme={props.theme} row={row} models={options.map((option) => option.value)} modelOptions={options} currentValue={row.model} focus={current.focus} error={error?.message} onSelect={(model) => { setOperationError(undefined); void applyModelSelection(props.controller, row.id, model, dispatch, setBusy).catch((caught) => setOperationError(operationErrorMessage(caught))); }} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>; }
          if (current.kind === "effort") { const options = row ? (props.variantOptions?.(row, row.model ?? "") ?? [{ title: "default", value: "" }]).map((option) => option.value || "default") : []; const error = selectionErrorPresentation(operationError()); return row ? <EffortSelect theme={props.theme} row={row} variants={options} focus={current.focus} error={error?.message} onSelect={(effort) => { setOperationError(undefined); void applyEffortSelection(props.controller, row.id, effort, dispatch, setBusy).catch((caught) => setOperationError(operationErrorMessage(caught))); }} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>; }
          if (current.kind === "delete") return row ? <DeleteWarning theme={props.theme} row={row} focus={current.confirmFocus} error={operationError()} onConfirm={() => { setOperationError(undefined); setBusy(true); void confirmDelete(props.controller, row.id, dispatch).then((error) => setOperationError(error)).finally(() => setBusy(false)); }} onCancel={() => { setOperationError(undefined); void cancelDelete(props.controller, row.id, dispatch); }} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>;

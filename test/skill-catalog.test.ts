@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { conflictForSkill, filterSkills, recommendSkill, renameSkill, resolveSkillConflict, variantForSkill, type SkillCandidate } from "../src/core/skill-catalog.ts";
 import { adaptInstalledSkills, discoverInstalledSkills } from "../src/tui/ai/skill-sources.ts";
+import { conflictDialogRows } from "../src/tui/screens/skill-picker.tsx";
 
 const installed: SkillCandidate = { id: "testing", name: "Testing", description: "Run and write tests", source: "installed" };
 const remote: SkillCandidate = { id: "test-expert", name: "Test Expert", description: "Testing workflows", source: "remote", registry: "skills.sh" };
@@ -50,6 +51,12 @@ describe("Skill catalog", () => {
     expect(resolveSkillConflict("keep", existing, incoming, ["testing"])).toEqual(existing);
     expect(resolveSkillConflict("replace", existing, incoming, ["testing"])).toEqual(incoming);
     expect(resolveSkillConflict("rename", existing, incoming, ["testing", "testing-2"])).toEqual({ ...incoming, id: "testing-3", name: "testing-3" });
+  });
+
+  it("presents the conflict diff with the three explicit action labels", () => {
+    expect(conflictDialogRows({ id: "testing", existing: "Existing", incoming: "Incoming", actions: ["replace", "keep", "rename"] })).toEqual([
+      "testing", "Existing", "Incoming", "Replace", "Keep existing", "Rename",
+    ]);
   });
 
   it("creates safe unique renamed identifiers and labels close matches as distinct variants", () => {

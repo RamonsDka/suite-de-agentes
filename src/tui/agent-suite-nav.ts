@@ -1,4 +1,5 @@
 import type { AgentCatalogRow } from "../core/types.ts";
+import type { SkillCandidate } from "../core/skill-catalog.ts";
 import { editorFields } from "./agent-suite-vm.ts";
 
 export type ModifyEdit =
@@ -27,7 +28,8 @@ export type AppScreen =
   | { kind: "modify"; agentId: string; focus: number; edit: ModifyEdit; editable?: boolean; protectedBase?: boolean }
   | { kind: "delete"; agentId: string; confirmFocus: 0 | 1 }
   | { kind: "create"; step: 0 | 1 | 2 | 3 | 4 | 5; draft: CreateDraft; focus: number }
-  | { kind: "coordinator"; stage: CoordinatorStage; focus: number; provider?: string; model?: string };
+  | { kind: "coordinator"; stage: CoordinatorStage; focus: number; provider?: string; model?: string }
+  | { kind: "skill-picker"; agentId: string; installed: readonly SkillCandidate[]; selected: string[]; query: string; focus: number };
 
 export type NavState = {
   stack: AppScreen[];
@@ -58,6 +60,9 @@ export type NavEvent =
   | { type: "EDIT_SKILLS_START_ADD" }
   | { type: "EDIT_SKILLS_INPUT"; value: string }
   | { type: "EDIT_SKILLS_ADD" }
+  | { type: "OPEN_SKILL_PICKER"; installed: readonly SkillCandidate[] }
+  | { type: "SKILL_PICKER_QUERY"; value: string }
+  | { type: "SKILL_PICKER_TOGGLE"; skill: string }
   | { type: "EDIT_TEXT_INPUT"; value: string }
   | { type: "EDIT_OPERATIONS_INPUT"; value: string }
   | { type: "EDIT_COMMIT"; agentId?: string }
@@ -194,6 +199,17 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
       const skill = screen.edit.input.trim();
       const skills = skill && !screen.edit.skills.includes(skill) ? [...screen.edit.skills, skill] : [...screen.edit.skills];
       return replaceTop(state, { ...screen, edit: skillDraft(skills, clamp(screen.edit.focus, skills.length)) });
+    }
+    case "OPEN_SKILL_PICKER":
+      return screen.kind === "modify" && screen.edit.mode === "skills" ? push(state, { kind: "skill-picker", agentId: screen.agentId, installed: event.installed, selected: [...screen.edit.skills], query: "", focus: 0 }) : state;
+    case "SKILL_PICKER_QUERY":
+      return screen.kind === "skill-picker" ? replaceTop(state, { ...screen, query: event.value, focus: 0 }) : state;
+    case "SKILL_PICKER_TOGGLE": {
+      if (screen.kind !== "skill-picker") return state;
+      const selected = screen.selected.includes(event.skill) ? screen.selected.filter((skill) => skill !== event.skill) : [...screen.selected, event.skill];
+      const parent = state.stack.at(-2);
+      if (parent?.kind !== "modify" || parent.edit.mode !== "skills") return state;
+      return { ...state, stack: [...state.stack.slice(0, -2), { ...parent, edit: skillDraft(selected) }] };
     }
     case "EDIT_TEXT_INPUT":
       return screen.kind === "modify" && screen.edit.mode === "text" ? replaceTop(state, { ...screen, edit: { ...screen.edit, value: event.value } }) : state;
