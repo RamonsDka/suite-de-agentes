@@ -5,6 +5,8 @@ import plugin, {
   AGENT_SUITE_COMMAND,
   AGENT_SUITE_ESCAPE_COMMAND,
   AGENT_SUITE_KEY,
+  buildCatalogOptions,
+  catalogDetailMessage,
   openAgentSuite,
   registerSuiteKeymap,
   registerSuiteSlashCommand,
@@ -14,6 +16,7 @@ import plugin, {
 } from "../src/tui/index.tsx";
 import { PLUGIN_VERSION } from "../src/version.ts";
 import { registerAgentSuiteEscapeHandler } from "../src/tui/agent-suite-mount.tsx";
+import { handleNestedScreenEscape } from "../src/tui/agent-suite-app.tsx";
 
 function registrationHost() {
   const disposers = {
@@ -39,6 +42,18 @@ function registrationHost() {
 }
 
 describe("Agent Suite WU1 registration", () => {
+  it("keeps fallback catalog options name-only while detail retains metadata", () => {
+    const row = {
+      id: "  Agente de catálogo  ", membership: "custom" as const, enabled: false,
+      model: "openai/gpt-5", variant: "high", description: "Asistente", skills: [], consent: "explicit-current-turn" as const,
+    };
+
+    expect(buildCatalogOptions([row])).toEqual([{ title: "Agente de catálogo", value: "  Agente de catálogo  " }]);
+    expect(catalogDetailMessage(row)).toContain("Estado: Creado · no materializado");
+    expect(catalogDetailMessage(row)).toContain("Modelo: openai/gpt-5");
+    expect(catalogDetailMessage(row)).toContain("Esfuerzo: high");
+  });
+
   it("exports the host-loadable plugin and versioned labels", () => {
     expect(plugin).toMatchObject({ id: "agent-suite" });
     expect(plugin.tui).toBe(tui);
@@ -79,6 +94,20 @@ describe("Agent Suite WU1 registration", () => {
     expect(escape?.run({ event: { preventDefault, stopPropagation } })).toBe(true);
     expect(preventDefault).toHaveBeenCalledTimes(1);
     expect(stopPropagation).toHaveBeenCalledTimes(1);
+    unregister();
+  });
+
+  it("makes host Escape search-aware without popping the catalog", () => {
+    const host = registrationHost();
+    const open = vi.fn();
+    registerSuiteKeymap(host.api, open);
+    const escape = host.layer.commands.find((command: any) => command.name === AGENT_SUITE_ESCAPE_COMMAND);
+    const dispatch = vi.fn();
+    const searching = { stack: [{ kind: "landing", focus: 0 }, { kind: "catalog", page: 0, focus: 0, query: "old", searchFocused: true }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
+    const unregister = registerAgentSuiteEscapeHandler(() => handleNestedScreenEscape(searching, dispatch, "draft"));
+
+    expect(escape?.run({ event: { preventDefault: vi.fn(), stopPropagation: vi.fn() } })).toBe(true);
+    expect(dispatch).toHaveBeenCalledWith({ type: "FOCUS_CATALOG_RESULTS", query: "draft" });
     unregister();
   });
 

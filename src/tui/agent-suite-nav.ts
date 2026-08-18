@@ -4,7 +4,7 @@ import { editorFields } from "./agent-suite-vm.ts";
 export type ModifyEdit =
   | { mode: "menu" }
   | { mode: "text"; field: "id" | "description" | "operations"; value: string }
-  | { mode: "skills"; skills: string[]; selected: string[]; focus: number; adding: boolean; input: string }
+  | { mode: "skills"; skills: string[]; selected?: string[]; focus: number; adding: boolean; input: string }
   | { mode: "operations"; prompt: string };
 
 export type CreateDraft = {
