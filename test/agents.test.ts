@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { globalAgentPath, materializeGlobalAgent, renameMaterializedAgent } from "../src/core/agents.ts";
+import { globalAgentPath, materializeGlobalAgent, renameMaterializedAgent, renameMaterializedAgentResult } from "../src/core/agents.ts";
 
 describe("agent materialization", () => {
   it("requires confirmation and writes only a validated global markdown path", () => {
@@ -35,10 +35,24 @@ describe("agent materialization", () => {
     const newAgent = { ...oldAgent, id: "new-agent" };
     materializeGlobalAgent(oldAgent, () => true, home);
     materializeGlobalAgent(newAgent, () => true, home);
+    const destinationBefore = readFileSync(globalAgentPath("new-agent", home), "utf8");
 
-    expect(() => renameMaterializedAgent("old-agent", "new-agent", newAgent, home)).toThrow(/already exists|existe|collision|colisi[oó]n/i);
+    expect(() => renameMaterializedAgentResult("old-agent", "new-agent", newAgent, home)).toThrow(/already exists|existe|collision|colisi[oó]n/i);
     expect(existsSync(globalAgentPath("old-agent", home))).toBe(true);
     expect(existsSync(globalAgentPath("new-agent", home))).toBe(true);
+    expect(readFileSync(globalAgentPath("new-agent", home), "utf8")).toBe(destinationBefore);
+  });
+
+  it("reports a missing source as a non-materialized migration without creating a destination", () => {
+    const home = mkdtempSync(join(tmpdir(), "agent-suite-home-"));
+    const agent = { id: "new-agent", description: "New", model: "openai/x", prompt: "Do work.", permissions: { read: "allow" as const }, skills: [] };
+
+    expect(renameMaterializedAgentResult("old-agent", "new-agent", agent, home)).toEqual({
+      kind: "not-materialized",
+      path: globalAgentPath("new-agent", home),
+    });
+    expect(existsSync(globalAgentPath("old-agent", home))).toBe(false);
+    expect(existsSync(globalAgentPath("new-agent", home))).toBe(false);
   });
 
   it("cleans up a failed generated write and preserves the old materialized file", () => {

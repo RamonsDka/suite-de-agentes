@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { constants, copyFileSync, existsSync, mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { validateAgentId } from "./config.ts";
 import { generateAgentMarkdown } from "./agent-markdown.ts";
@@ -19,30 +19,47 @@ export function materializeGlobalAgent(agent: CustomAgent, confirm: () => boolea
   return target;
 }
 
-export function renameMaterializedAgent(oldId: string, newId: string, agent: CustomAgent, home?: string): string {
+export type MaterializedAgentRenameResult =
+  | { kind: "migrated"; path: string }
+  | { kind: "unchanged"; path: string }
+  | { kind: "not-materialized"; path: string };
+
+function removeIfPresent(path: string): void {
+  try {
+    if (existsSync(path)) unlinkSync(path);
+  } catch {
+    // Cleanup is best effort; the original migration error remains authoritative.
+  }
+}
+
+export function renameMaterializedAgentResult(oldId: string, newId: string, agent: CustomAgent, home?: string): MaterializedAgentRenameResult {
   validateAgentId(oldId);
   validateAgentId(newId);
-  if (oldId === newId) return globalAgentPath(newId, home);
+  if (oldId === newId) return { kind: "unchanged", path: globalAgentPath(newId, home) };
   const oldPath = globalAgentPath(oldId, home);
   const newPath = globalAgentPath(newId, home);
   if (existsSync(newPath)) throw new Error(`Materialized agent already exists: ${newId}`);
-  if (!existsSync(oldPath)) return newPath;
+  if (!existsSync(oldPath)) return { kind: "not-materialized", path: newPath };
 
   mkdirSync(dirname(newPath), { recursive: true });
   const temporary = `${newPath}.tmp-${randomBytes(6).toString("hex")}`;
   let promoted = false;
   try {
     writeFileSync(temporary, generateAgentMarkdown({ ...agent, id: newId }), { mode: 0o600 });
-    renameSync(temporary, newPath);
+    copyFileSync(temporary, newPath, constants.COPYFILE_EXCL);
     promoted = true;
     unlinkSync(oldPath);
-    return newPath;
+    return { kind: "migrated", path: newPath };
   } catch (error) {
-    if (promoted && existsSync(newPath)) unlinkSync(newPath);
+    if (promoted) removeIfPresent(newPath);
     throw error;
   } finally {
-    if (existsSync(temporary)) unlinkSync(temporary);
+    removeIfPresent(temporary);
   }
+}
+
+export function renameMaterializedAgent(oldId: string, newId: string, agent: CustomAgent, home?: string): string {
+  return renameMaterializedAgentResult(oldId, newId, agent, home).path;
 }
 
 export function listRuntimeModels(state: unknown): string[] {

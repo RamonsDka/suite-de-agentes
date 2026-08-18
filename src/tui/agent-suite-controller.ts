@@ -1,8 +1,10 @@
 import type { AgentCatalogRow, CustomAgent, SuiteConfig } from "../core/types.ts";
+import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { buildSuiteDeAgentesCatalog, SUITE_DE_AGENTES_SEED } from "../core/suites.ts";
-import { setAgentModelAssignment } from "../core/config.ts";
+import { patchCustomAgent, setAgentModelAssignment, type AgentPatch } from "../core/config.ts";
 import { loadSuiteConfig, saveSuiteConfig } from "../core/persistence.ts";
-import { materializeGlobalAgent } from "../core/agents.ts";
+import { globalAgentPath, materializeGlobalAgent, renameMaterializedAgentResult } from "../core/agents.ts";
 import type { CreateDraft } from "./agent-suite-nav.ts";
 
 export interface AgentSuiteController {
@@ -15,6 +17,7 @@ export interface AgentSuiteController {
   setEffort(id: string, variant: string): Promise<void>;
   setSkills(id: string, skills: string[]): Promise<void>;
   setOperations(id: string, prompt: string): Promise<void>;
+  patchAgent?(id: string, patch: AgentPatch): Promise<void>;
   operations?(id: string): string | undefined;
 }
 
@@ -23,6 +26,7 @@ type ControllerOptions = {
   runtime?: Record<string, { model?: string; variant?: string; description?: string }>;
   custom?: Record<string, CustomAgent>;
   seed?: readonly string[];
+  home?: string;
 };
 
 export function createAgentSuiteController(
@@ -48,6 +52,61 @@ export function createAgentSuiteController(
   const persist = () => { if (options.path) saveSuiteConfig(options.path, config); };
   const find = (id: string) => currentRows.find((row) => row.id === id);
   const mutation = async (operation: () => void) => { operation(); persist(); rebuild(); };
+  const patchAgent = async (id: string, patch: AgentPatch) => {
+    const prior = structuredClone(config);
+    const patched = patchCustomAgent(config, id, patch);
+    let migration: { oldId: string; newId: string; oldPath: string; newPath: string; bytes?: Buffer; mode?: number; migrated: boolean } | undefined;
+    if (patch.newId !== undefined && patch.newId !== id) {
+      const oldPath = globalAgentPath(id, options.home);
+      migration = {
+        oldId: id,
+        newId: patch.newId,
+        oldPath,
+        newPath: globalAgentPath(patch.newId, options.home),
+        ...(existsSync(oldPath) ? { bytes: readFileSync(oldPath), mode: statSync(oldPath).mode & 0o777 } : {}),
+        migrated: false,
+      };
+    }
+    try {
+      config = patched;
+      persist();
+      if (migration) {
+        const agent = config.customAgents[migration.newId];
+        if (!agent) throw new Error(`Unknown custom agent: ${migration.newId}`);
+        const result = renameMaterializedAgentResult(id, migration.newId, {
+          ...agent,
+          model: config.modelAssignments[migration.newId] ?? agent.model,
+          variant: config.variantAssignments[migration.newId] ?? agent.variant,
+        }, options.home);
+        migration.migrated = result.kind === "migrated";
+      }
+      rebuild();
+    } catch (error) {
+      const rollbackErrors: string[] = [];
+      if (migration?.migrated) {
+        try {
+          if (existsSync(migration.newPath)) unlinkSync(migration.newPath);
+          if (migration.bytes) {
+            mkdirSync(dirname(migration.oldPath), { recursive: true });
+            writeFileSync(migration.oldPath, migration.bytes, { mode: migration.mode });
+          }
+        } catch (rollbackError) {
+          rollbackErrors.push(`filesystem rollback failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`);
+        }
+      }
+      try {
+        config = prior;
+        persist();
+      } catch (rollbackError) {
+        rollbackErrors.push(`config rollback failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`);
+      }
+      try { rebuild(); } catch (rollbackError) {
+        rollbackErrors.push(`refresh rollback failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`);
+      }
+      const originalMessage = error instanceof Error ? error.message : String(error);
+      throw rollbackErrors.length > 0 ? new Error(`${originalMessage}; ${rollbackErrors.join("; ")}`) : error;
+    }
+  };
   return {
     snapshot: () => ({ rows: currentRows.map((row) => ({ ...row, skills: [...row.skills] })), version }),
     refresh: () => rebuild(),
@@ -65,6 +124,7 @@ export function createAgentSuiteController(
     setEffort: async (id, variant) => mutation(() => { config = setAgentModelAssignment(config, id, config.modelAssignments[id] ?? find(id)?.model ?? "openai/gpt-5", variant || undefined); }),
     setSkills: async (id, skills) => mutation(() => { const agent = config.customAgents[id]; if (!agent) throw new Error(`Unknown custom agent: ${id}`); agent.skills = [...skills]; }),
     setOperations: async (id, prompt) => mutation(() => { const agent = config.customAgents[id]; if (!agent) throw new Error(`Unknown custom agent: ${id}`); agent.prompt = prompt; }),
+    patchAgent,
     operations: (id) => config.customAgents[id]?.prompt,
   };
 }
