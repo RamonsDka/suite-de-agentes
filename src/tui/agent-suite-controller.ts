@@ -2,16 +2,18 @@ import type { AgentCatalogRow, CustomAgent, SuiteConfig } from "../core/types.ts
 import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { buildSuiteDeAgentesCatalog, SUITE_DE_AGENTES_SEED } from "../core/suites.ts";
-import { patchCustomAgent, setAgentModelAssignment, type AgentPatch } from "../core/config.ts";
+import { patchBaseAgent, patchCustomAgent, setAgentModelAssignment, type AgentPatch } from "../core/config.ts";
 import { loadSuiteConfig, saveSuiteConfig } from "../core/persistence.ts";
 import { globalAgentPath, materializeGlobalAgent, renameMaterializedAgentResult } from "../core/agents.ts";
 import type { CreateDraft } from "./agent-suite-nav.ts";
 
 export interface AgentSuiteController {
-  snapshot(): { rows: AgentCatalogRow[]; version: string };
+  snapshot(): { rows: AgentCatalogRow[]; disabledRows?: AgentCatalogRow[]; version: string };
   refresh(): void;
   createAgent(draft: CreateDraft): Promise<void>;
   deleteAgent(id: string): Promise<void>;
+  deactivateAgent?(id: string): Promise<void>;
+  reactivateAgent?(id: string): Promise<void>;
   materialize(id: string): Promise<void>;
   setModel(id: string, model: string): Promise<void>;
   setEffort(id: string, variant: string): Promise<void>;
@@ -23,7 +25,7 @@ export interface AgentSuiteController {
 
 type ControllerOptions = {
   path?: string;
-  runtime?: Record<string, { model?: string; variant?: string; description?: string }>;
+  runtime?: Record<string, { model?: string; variant?: string; description?: string; prompt?: string; skills?: string[] }>;
   custom?: Record<string, CustomAgent>;
   seed?: readonly string[];
   home?: string;
@@ -36,6 +38,7 @@ export function createAgentSuiteController(
 ): AgentSuiteController {
   const seed = options.seed ?? SUITE_DE_AGENTES_SEED;
   let currentRows = rows.map((row) => ({ ...row, skills: [...row.skills] }));
+  let disabledRows: AgentCatalogRow[] = [];
   const rowCustomAgents = Object.fromEntries(rows.filter((row) => row.membership === "custom").map((row) => [row.id, {
     id: row.id,
     description: row.description ?? row.id,
@@ -46,15 +49,21 @@ export function createAgentSuiteController(
     skills: [...row.skills],
   }]));
   let config: SuiteConfig = options.path ? loadSuiteConfig(options.path) : { version: 1, customAgents: { ...rowCustomAgents, ...(options.custom ?? {}) }, modelAssignments: {}, variantAssignments: {} };
-  const runtime = options.runtime ?? Object.fromEntries(currentRows.map((row) => [row.id, { model: row.model, variant: row.variant, description: row.description }]));
-  const rebuild = () => { currentRows = buildSuiteDeAgentesCatalog(runtime, config.customAgents, seed, config.modelAssignments, config.variantAssignments); };
+  const runtime = options.runtime ?? Object.fromEntries(currentRows.map((row) => [row.id, { model: row.model, variant: row.variant, description: row.description, prompt: row.operations, skills: row.skills }]));
+  const rebuild = () => {
+    const allRows = buildSuiteDeAgentesCatalog(runtime, config.customAgents, seed, config.modelAssignments, config.variantAssignments, config.baseOverrides, config.disabledAgents);
+    currentRows = allRows.filter((row) => row.disabled !== true);
+    disabledRows = allRows.filter((row) => row.disabled === true);
+  };
   rebuild();
   const persist = () => { if (options.path) saveSuiteConfig(options.path, config); };
   const find = (id: string) => currentRows.find((row) => row.id === id);
   const mutation = async (operation: () => void) => { operation(); persist(); rebuild(); };
   const patchAgent = async (id: string, patch: AgentPatch) => {
     const prior = structuredClone(config);
-    const patched = patchCustomAgent(config, id, patch);
+    const patched = seed.includes(id)
+      ? patchBaseAgent(config, id, patch)
+      : patchCustomAgent(config, id, patch);
     let migration: { oldId: string; newId: string; oldPath: string; newPath: string; bytes?: Buffer; mode?: number; migrated: boolean } | undefined;
     if (patch.newId !== undefined && patch.newId !== id) {
       const oldPath = globalAgentPath(id, options.home);
@@ -108,13 +117,49 @@ export function createAgentSuiteController(
     }
   };
   return {
-    snapshot: () => ({ rows: currentRows.map((row) => ({ ...row, skills: [...row.skills] })), version }),
+    snapshot: () => ({
+      rows: currentRows.map((row) => ({ ...row, skills: [...row.skills] })),
+      disabledRows: disabledRows.map((row) => ({ ...row, skills: [...row.skills] })),
+      version,
+    }),
     refresh: () => rebuild(),
     createAgent: async (draft) => mutation(() => {
       if (config.customAgents[draft.id] || seed.includes(draft.id)) throw new Error(`Agent already exists: ${draft.id}`);
-      config.customAgents[draft.id] = { id: draft.id, description: draft.description, model: draft.model, variant: draft.effort || undefined, prompt: draft.operations, permissions: { read: "allow", edit: "ask" }, skills: [...draft.skills] };
+      config.customAgents[draft.id] = { id: draft.id, description: draft.description, model: draft.model, prompt: draft.operations, permissions: { read: "allow", edit: "ask" }, skills: [...draft.skills] };
+      config = setAgentModelAssignment(config, draft.id, draft.model, draft.effort || undefined);
     }),
-    deleteAgent: async (id) => mutation(() => { delete config.customAgents[id]; delete config.modelAssignments[id]; delete config.variantAssignments[id]; }),
+    deleteAgent: async (id) => {
+      if (seed.includes(id)) throw new Error(`Base agent '${id}' is protected; use deactivate instead.`);
+      const prior = structuredClone(config);
+      const path = globalAgentPath(id, options.home);
+      const file = existsSync(path) ? { bytes: readFileSync(path), mode: statSync(path).mode & 0o777 } : undefined;
+      try {
+        delete config.customAgents[id];
+        delete config.modelAssignments[id];
+        delete config.variantAssignments[id];
+        if (config.disabledAgents) config.disabledAgents = config.disabledAgents.filter((agentID) => agentID !== id);
+        persist();
+        if (existsSync(path)) unlinkSync(path);
+        rebuild();
+      } catch (error) {
+        config = prior;
+        try { persist(); } catch { /* Preserve the original deletion error. */ }
+        if (file && !existsSync(path)) {
+          mkdirSync(dirname(path), { recursive: true });
+          writeFileSync(path, file.bytes, { mode: file.mode });
+        }
+        try { rebuild(); } catch { /* Preserve the original deletion error. */ }
+        throw error;
+      }
+    },
+    deactivateAgent: async (id) => mutation(() => {
+      if (!seed.includes(id)) throw new Error(`Only base agents can be deactivated: ${id}`);
+      config.disabledAgents = [...new Set([...(config.disabledAgents ?? []), id])];
+    }),
+    reactivateAgent: async (id) => mutation(() => {
+      if (!seed.includes(id) && !config.customAgents[id]) throw new Error(`Unknown owned agent: ${id}`);
+      config.disabledAgents = (config.disabledAgents ?? []).filter((agentID) => agentID !== id);
+    }),
     materialize: async (id) => mutation(() => {
       const agent = config.customAgents[id];
       if (!agent) throw new Error(`Unknown custom agent: ${id}`);
@@ -125,6 +170,6 @@ export function createAgentSuiteController(
     setSkills: async (id, skills) => mutation(() => { const agent = config.customAgents[id]; if (!agent) throw new Error(`Unknown custom agent: ${id}`); agent.skills = [...skills]; }),
     setOperations: async (id, prompt) => mutation(() => { const agent = config.customAgents[id]; if (!agent) throw new Error(`Unknown custom agent: ${id}`); agent.prompt = prompt; }),
     patchAgent,
-    operations: (id) => config.customAgents[id]?.prompt,
+    operations: (id) => config.customAgents[id]?.prompt ?? config.baseOverrides?.[id]?.operations,
   };
 }
