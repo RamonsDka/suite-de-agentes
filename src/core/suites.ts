@@ -1,4 +1,4 @@
-import type { AgentCatalogRow, CustomAgent } from "./types.ts";
+import type { AgentCatalogRow, BaseAgentOverride, CustomAgent } from "./types.ts";
 
 export const SUITE_DE_AGENTES_SEED = ["general", "agent-especialit-github"] as const;
 
@@ -8,25 +8,32 @@ export function buildSuiteDeAgentesCatalog(
   seed: readonly string[] = SUITE_DE_AGENTES_SEED,
   modelAssignments: Record<string, string> = {},
   variantAssignments: Record<string, string> = {},
+  baseOverrides: Record<string, BaseAgentOverride> = {},
+  disabledAgents: readonly string[] = [],
 ): AgentCatalogRow[] {
   const seedIDs = new Set(seed);
+  const disabledIDs = new Set(disabledAgents);
   const memberIDs = new Set([...seed, ...Object.keys(custom)]);
   return [...memberIDs].map((id): AgentCatalogRow => {
     const runtimeAgent = runtime[id];
     const customAgent = custom[id];
+    const override = baseOverrides[id] ?? {};
     const row: AgentCatalogRow = {
       id,
       membership: seedIDs.has(id) ? "seed" : "custom",
-      enabled: runtimeAgent !== undefined,
-      skills: customAgent ? [...customAgent.skills] : [],
+      enabled: runtimeAgent !== undefined && !disabledIDs.has(id),
+      disabled: disabledIDs.has(id),
+      skills: override.skills ? [...override.skills] : customAgent ? [...customAgent.skills] : [],
       consent: "explicit-current-turn",
     };
     const model = modelAssignments[id] ?? runtimeAgent?.model ?? customAgent?.model;
-    const description = runtimeAgent?.description ?? customAgent?.description;
+    const description = override.description ?? runtimeAgent?.description ?? customAgent?.description;
     const variant = variantAssignments[id] ?? runtimeAgent?.variant;
+    const operations = override.operations ?? customAgent?.prompt;
     if (model !== undefined) row.model = model;
     if (description !== undefined) row.description = description;
     if (variant !== undefined) row.variant = variant;
+    if (operations !== undefined) row.operations = operations;
     return row;
   }).sort((a, b) => a.id.localeCompare(b.id));
 }
