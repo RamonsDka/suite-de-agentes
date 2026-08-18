@@ -3,7 +3,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import plugin, {
   AGENT_SUITE_COMMAND,
+  AGENT_SUITE_ESCAPE_COMMAND,
   AGENT_SUITE_KEY,
+  buildCatalogOptions,
+  catalogDetailMessage,
   openAgentSuite,
   registerSuiteKeymap,
   registerSuiteSlashCommand,
@@ -12,6 +15,8 @@ import plugin, {
   tui,
 } from "../src/tui/index.tsx";
 import { PLUGIN_VERSION } from "../src/version.ts";
+import { registerAgentSuiteEscapeHandler } from "../src/tui/agent-suite-mount.tsx";
+import { handleNestedScreenEscape } from "../src/tui/agent-suite-app.tsx";
 
 function registrationHost() {
   const disposers = {
@@ -37,6 +42,18 @@ function registrationHost() {
 }
 
 describe("Agent Suite WU1 registration", () => {
+  it("keeps fallback catalog options name-only while detail retains metadata", () => {
+    const row = {
+      id: "  Agente de catálogo  ", membership: "custom" as const, enabled: false,
+      model: "openai/gpt-5", variant: "high", description: "Asistente", skills: [], consent: "explicit-current-turn" as const,
+    };
+
+    expect(buildCatalogOptions([row])).toEqual([{ title: "Agente de catálogo", value: "  Agente de catálogo  " }]);
+    expect(catalogDetailMessage(row)).toContain("Estado: Creado · no materializado");
+    expect(catalogDetailMessage(row)).toContain("Modelo: openai/gpt-5");
+    expect(catalogDetailMessage(row)).toContain("Esfuerzo: high");
+  });
+
   it("exports the host-loadable plugin and versioned labels", () => {
     expect(plugin).toMatchObject({ id: "agent-suite" });
     expect(plugin.tui).toBe(tui);
@@ -49,12 +66,49 @@ describe("Agent Suite WU1 registration", () => {
     const host = registrationHost();
     const open = vi.fn();
     expect(registerSuiteKeymap(host.api, open)).toBe(true);
-    expect(host.layer.bindings).toEqual([{ key: AGENT_SUITE_KEY, cmd: AGENT_SUITE_COMMAND }]);
-    expect(host.layer.commands).toHaveLength(1);
+    expect(host.layer.bindings).toEqual([
+      { key: AGENT_SUITE_KEY, cmd: AGENT_SUITE_COMMAND },
+      { key: "escape", cmd: AGENT_SUITE_ESCAPE_COMMAND },
+    ]);
+    expect(host.layer.commands).toHaveLength(2);
     expect(host.layer.commands[0].run()).toBe(true);
     expect(registerSuiteSlashCommand(host.api, open)).toBe(true);
     host.slash[0].onSelect();
     expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it("consumes nested Escape through the keymap layer and leaves landing Escape to the host", () => {
+    const host = registrationHost();
+    const open = vi.fn();
+    expect(registerSuiteKeymap(host.api, open)).toBe(true);
+    const escape = host.layer.commands.find((command: any) => command.name === AGENT_SUITE_ESCAPE_COMMAND);
+    const binding = host.layer.bindings.find((item: any) => item.key === "escape");
+
+    expect(binding).toMatchObject({ key: "escape", cmd: AGENT_SUITE_ESCAPE_COMMAND });
+    expect(binding.preventDefault).not.toBe(false);
+    expect(escape?.run({ event: { preventDefault: vi.fn(), stopPropagation: vi.fn() } })).toBe(false);
+
+    const preventDefault = vi.fn();
+    const stopPropagation = vi.fn();
+    const unregister = registerAgentSuiteEscapeHandler(() => true);
+    expect(escape?.run({ event: { preventDefault, stopPropagation } })).toBe(true);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+    unregister();
+  });
+
+  it("makes host Escape search-aware without popping the catalog", () => {
+    const host = registrationHost();
+    const open = vi.fn();
+    registerSuiteKeymap(host.api, open);
+    const escape = host.layer.commands.find((command: any) => command.name === AGENT_SUITE_ESCAPE_COMMAND);
+    const dispatch = vi.fn();
+    const searching = { stack: [{ kind: "landing", focus: 0 }, { kind: "catalog", page: 0, focus: 0, query: "old", searchFocused: true }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
+    const unregister = registerAgentSuiteEscapeHandler(() => handleNestedScreenEscape(searching, dispatch, "draft"));
+
+    expect(escape?.run({ event: { preventDefault: vi.fn(), stopPropagation: vi.fn() } })).toBe(true);
+    expect(dispatch).toHaveBeenCalledWith({ type: "FOCUS_CATALOG_RESULTS", query: "draft" });
+    unregister();
   });
 
   it("opens the custom Dialog through one replace and does not expose route APIs", () => {
