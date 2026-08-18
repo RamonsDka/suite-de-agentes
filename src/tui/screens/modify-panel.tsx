@@ -7,6 +7,7 @@ import { validateSkillId } from "../../core/config.ts";
 import { editorFields, modifyOptions, type EditorField, truncate } from "../agent-suite-vm.ts";
 import type { ModifyEdit } from "../agent-suite-nav.ts";
 import { Divider, FieldRow, SectionPanel, SelectableRow, StatusBadge } from "../visual-primitives.tsx";
+import { editorSaveStatus } from "./ai-preview.tsx";
 
 export interface ModifyPanelProps {
   theme: TuiTheme;
@@ -81,6 +82,10 @@ export function validateSkillInput(value: string, existing: readonly string[]): 
   try { validateSkillId(skill); } catch { return "El skill debe usar minúsculas, números y guiones, sin espacios ni separadores."; }
   if (existing.includes(skill)) return "Ese skill ya está agregado.";
   return undefined;
+}
+
+export function modifyFinalizationStatus(edit: ModifyEdit): ReturnType<typeof editorSaveStatus> {
+  return editorSaveStatus(edit.mode !== "menu");
 }
 
 export function syncDraftInput(value: string, setLocal: (value: string) => void): void {
@@ -163,6 +168,7 @@ export function ModifyPanel(props: ModifyPanelProps): JSX.Element {
       <SectionPanel theme={props.theme} title="Modificar agente">
        {editorMenuRows(props.row, props.operations ?? "", props.focus, props.protectedBase === true).map((row) => <SelectableRow theme={props.theme} selected={row.selected} onActivate={() => props.onActivate(row.field)}>{row.label}{row.value ? `: ${truncate(row.value, 72)}` : ""}</SelectableRow>)}
       </SectionPanel>
+      <StatusBadge theme={props.theme} status={modifyFinalizationStatus(edit()).status}>{modifyFinalizationStatus(edit()).label}</StatusBadge>
       {props.busy ? <StatusBadge theme={props.theme} status="info">Guardando cambios…</StatusBadge> : null}
       {props.error ? <StatusBadge theme={props.theme} status="error">{props.error}</StatusBadge> : null}
     </box>
