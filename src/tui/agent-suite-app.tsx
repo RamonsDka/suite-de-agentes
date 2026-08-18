@@ -120,7 +120,9 @@ export async function applyInlineEdit(controller: AgentSuiteController, agentId:
   if (screen.kind !== "modify" || screen.edit.mode === "menu") return "No hay una edición activa.";
   try {
     if (screen.edit.mode === "skills") await controller.setSkills(agentId, [...screen.edit.selected]);
-    else await controller.setOperations(agentId, screen.edit.prompt);
+    else if (screen.edit.mode === "operations") await controller.setOperations(agentId, screen.edit.prompt);
+    else if (screen.edit.mode === "text" && screen.edit.field === "operations") await controller.setOperations(agentId, screen.edit.value);
+    else return "No hay una edición activa.";
     controller.refresh();
     dispatch({ type: "EDIT_COMMIT" });
     return undefined;

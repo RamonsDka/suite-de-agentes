@@ -1,20 +1,45 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   initialNavState,
   reduceNav,
   type AppScreen,
+  type NavState,
 } from "../src/tui/agent-suite-nav.ts";
 import {
   MAX_VISIBLE_ROWS,
+  editorFields,
   modifyOptions,
   pageRows,
   screenTitle,
 } from "../src/tui/agent-suite-vm.ts";
+import { landingMouseActivation, landingRows } from "../src/tui/screens/landing.tsx";
 
 const seed = { id: "general", membership: "seed" as const, enabled: true, skills: [], consent: "explicit-current-turn" as const };
 const custom = { ...seed, id: "custom", membership: "custom" as const };
 
 describe("Agent Suite navigation", () => {
+  it("keeps two landing choices and exposes their selected presentation state", () => {
+    expect(landingRows(0)).toEqual([
+      { label: "CATALOGO", selected: true },
+      { label: "CREAR AGENTE", selected: false },
+    ]);
+    expect(landingRows(1)).toEqual([
+      { label: "CATALOGO", selected: false },
+      { label: "CREAR AGENTE", selected: true },
+    ]);
+  });
+
+  it("activates landing choices only for left-click rows", () => {
+    const activate = vi.fn();
+    const left = { button: 0, preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as import("@opentui/core").MouseEvent;
+    const right = { button: 2, preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as import("@opentui/core").MouseEvent;
+
+    expect(landingMouseActivation(left, 1, activate)).toBe(true);
+    expect(landingMouseActivation(right, 0, activate)).toBe(false);
+    expect(activate).toHaveBeenCalledWith(1);
+    expect(right.preventDefault).not.toHaveBeenCalled();
+  });
+
   it("pushes landing destinations and preserves catalog context on Back", () => {
     const catalog = reduceNav(initialNavState(), { type: "ACTIVATE_LANDING_ITEM", index: 0 });
     const paged = reduceNav(catalog, { type: "PAGE", delta: 1, maxPage: 3 });
@@ -57,4 +82,56 @@ describe("Agent Suite navigation", () => {
     expect(modifyOptions(seed)).toEqual(["Modelo de IA", "Nivel de esfuerzo", "Volver"]);
     expect(modifyOptions(custom)).toEqual(["Modelo de IA", "Nivel de esfuerzo", "Skills", "Operaciones", "Volver"]);
   });
+
+  it("defines deterministic membership-scoped editor fields", () => {
+    expect(editorFields(custom)).toEqual(["id", "description", "skills", "operations", "model", "effort", "delete"]);
+    expect(editorFields(seed)).toEqual(["model", "effort"]);
+  });
+
+  it("bounds editor-menu focus to the final permitted field", () => {
+    let customMenu = reduceNav(infoState(custom.id), { type: "OPEN_MODIFY", agentId: custom.id, custom: true });
+    let seedMenu = reduceNav(infoState(seed.id), { type: "OPEN_MODIFY", agentId: seed.id });
+    for (let index = 0; index < 10; index += 1) {
+      customMenu = reduceNav(customMenu, { type: "MOVE_FOCUS", delta: 1 });
+      seedMenu = reduceNav(seedMenu, { type: "MOVE_FOCUS", delta: 1 });
+    }
+
+    expect(customMenu.stack.at(-1)).toMatchObject({ kind: "modify", focus: 6 });
+    expect(seedMenu.stack.at(-1)).toMatchObject({ kind: "modify", focus: 1 });
+  });
+
+  it("stages text and skills drafts without leaking mutable source values", () => {
+    const menu = reduceNav(infoState(custom.id), { type: "OPEN_MODIFY", agentId: custom.id, custom: true });
+    const text = reduceNav(menu, { type: "MODIFY_ACTIVATE", option: "description", value: "Draft description" });
+    const textInput = reduceNav(text, { type: "EDIT_TEXT_INPUT", value: "Updated description" });
+    const skills = reduceNav(menu, { type: "MODIFY_ACTIVATE", option: "skills", skills: ["testing"] });
+    const added = reduceNav(reduceNav(skills, { type: "EDIT_SKILLS_START_ADD" }), { type: "EDIT_SKILLS_INPUT", value: "github" });
+    const committedDraft = reduceNav(added, { type: "EDIT_SKILLS_ADD" });
+
+    expect(text.stack.at(-1)).toMatchObject({ edit: { mode: "text", field: "description", value: "Draft description" } });
+    expect(textInput.stack.at(-1)).toMatchObject({ edit: { mode: "text", field: "description", value: "Updated description" } });
+    expect(skills.stack.at(-1)).toMatchObject({ edit: { mode: "skills", skills: ["testing"], focus: 0, adding: false, input: "" } });
+    expect(committedDraft.stack.at(-1)).toMatchObject({ edit: { mode: "skills", skills: ["testing", "github"], adding: false, input: "" } });
+    expect((skills.stack.at(-1) as any).edit.skills).not.toBe(custom.skills);
+  });
+
+  it("keeps draft focus bounded and backs out of nested edits before the screen", () => {
+    const menu = reduceNav(infoState(custom.id), { type: "OPEN_MODIFY", agentId: custom.id, custom: true });
+    const skills = reduceNav(menu, { type: "MODIFY_ACTIVATE", option: "skills", skills: ["testing"] });
+    const moved = reduceNav(reduceNav(skills, { type: "MOVE_FOCUS", delta: 1 }), { type: "MOVE_FOCUS", delta: 1 });
+    const draftBack = reduceNav(moved, { type: "BACK" });
+    const screenBack = reduceNav(draftBack, { type: "BACK" });
+
+    expect((moved.stack.at(-1) as any).edit.focus).toBe(1);
+    expect(draftBack.stack.at(-1)).toMatchObject({ kind: "modify", edit: { mode: "menu" } });
+    expect(screenBack.stack.at(-1)).toMatchObject({ kind: "info", agentId: custom.id });
+  });
 });
+
+function infoState(agentId: string): NavState {
+  return {
+    stack: [{ kind: "landing" as const, focus: 0 }, { kind: "info" as const, agentId, focus: 0 }],
+    busy: false,
+    closing: false,
+  };
+}

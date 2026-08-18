@@ -1,8 +1,10 @@
 import type { AgentCatalogRow } from "../core/types.ts";
+import { editorFields } from "./agent-suite-vm.ts";
 
 export type ModifyEdit =
   | { mode: "menu" }
-  | { mode: "skills"; selected: string[]; focus: number }
+  | { mode: "text"; field: "id" | "description" | "operations"; value: string }
+  | { mode: "skills"; skills: string[]; selected: string[]; focus: number; adding: boolean; input: string }
   | { mode: "operations"; prompt: string };
 
 export type CreateDraft = {
@@ -37,12 +39,16 @@ export type NavEvent =
   | { type: "MOVE_FOCUS"; delta: -1 | 1; maxFocus?: number }
   | { type: "PAGE"; delta: -1 | 1; maxPage?: number }
   | { type: "OPEN_MODIFY"; agentId?: string; custom?: boolean }
-  | { type: "MODIFY_ACTIVATE"; option: "model" | "effort" | "skills" | "operations" | "back"; skills?: string[]; operations?: string }
+  | { type: "MODIFY_ACTIVATE"; option: "id" | "description" | "model" | "effort" | "skills" | "operations" | "delete" | "back"; skills?: string[]; operations?: string; value?: string }
   | { type: "SELECT_MODEL"; model: string }
   | { type: "SELECT_EFFORT"; effort: string }
   | { type: "EDIT_SKILLS_TOGGLE"; index: number; skill?: string }
+  | { type: "EDIT_SKILLS_START_ADD" }
+  | { type: "EDIT_SKILLS_INPUT"; value: string }
+  | { type: "EDIT_SKILLS_ADD" }
+  | { type: "EDIT_TEXT_INPUT"; value: string }
   | { type: "EDIT_OPERATIONS_INPUT"; value: string }
-  | { type: "EDIT_COMMIT" }
+  | { type: "EDIT_COMMIT"; agentId?: string }
   | { type: "EDIT_CANCEL" }
   | { type: "REQUEST_DELETE"; agentId?: string }
   | { type: "CONFIRM_DELETE" }
@@ -79,9 +85,21 @@ function pop(state: NavState): NavState {
   return state.stack.length > 1 ? { ...state, stack: state.stack.slice(0, -1) } : state;
 }
 
+function clamp(value: number, max: number): number {
+  return Math.max(0, Math.min(Math.max(0, max), value));
+}
+
 function stepCreate(screen: Extract<AppScreen, { kind: "create" }>, delta: -1 | 1): Extract<AppScreen, { kind: "create" }> {
   const step = Math.max(0, Math.min(5, screen.step + delta)) as Extract<AppScreen, { kind: "create" }>["step"];
   return { ...screen, step };
+}
+
+function modifyMaxFocus(screen: Extract<AppScreen, { kind: "modify" }>): number {
+  return editorFields({ membership: screen.editable === true ? "custom" : "seed" }).length - 1;
+}
+
+function skillDraft(skills: string[], focus = 0, adding = false, input = ""): Extract<ModifyEdit, { mode: "skills" }> {
+  return { mode: "skills", skills: [...skills], selected: [...skills], focus, adding, input };
 }
 
 export function reduceNav(state: NavState, event: NavEvent): NavState {
@@ -100,14 +118,12 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
     case "ACTIVATE_AGENT":
       return screen.kind === "catalog" ? push(state, { kind: "info", agentId: event.agentId, focus: 0 }) : state;
     case "MOVE_FOCUS": {
-      const max = Math.max(0, event.maxFocus ?? (screen.kind === "landing" ? 1 : 0));
-      if (screen.kind === "landing") return replaceTop(state, { ...screen, focus: Math.max(0, Math.min(max, screen.focus + event.delta)) as 0 | 1 });
-      if (screen.kind === "catalog") return replaceTop(state, { ...screen, focus: Math.max(0, Math.min(max, screen.focus + event.delta)) });
-      if (screen.kind === "info" || screen.kind === "model" || screen.kind === "effort") return replaceTop(state, { ...screen, focus: Math.max(0, Math.min(max, screen.focus + event.delta)) });
-      if (screen.kind === "modify" && screen.edit.mode === "menu") return replaceTop(state, { ...screen, focus: Math.max(0, Math.min(max, screen.focus + event.delta)) });
-      if (screen.kind === "modify" && screen.edit.mode === "skills") return replaceTop(state, { ...screen, edit: { ...screen.edit, focus: Math.max(0, Math.min(max, screen.edit.focus + event.delta)) } });
-      if (screen.kind === "delete") return replaceTop(state, { ...screen, confirmFocus: Math.max(0, Math.min(1, screen.confirmFocus + event.delta)) as 0 | 1 });
-      if (screen.kind === "create") return replaceTop(state, { ...screen, focus: Math.max(0, Math.min(max, screen.focus + event.delta)) });
+      const max = event.maxFocus ?? (screen.kind === "landing" ? 1 : screen.kind === "modify" && screen.edit.mode === "menu" ? modifyMaxFocus(screen) : screen.kind === "modify" && screen.edit.mode === "skills" ? screen.edit.skills.length : screen.kind === "delete" ? 1 : 0);
+      if (screen.kind === "landing") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) as 0 | 1 });
+      if (screen.kind === "catalog" || screen.kind === "info" || screen.kind === "model" || screen.kind === "effort" || screen.kind === "create") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) });
+      if (screen.kind === "modify" && screen.edit.mode === "menu") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) });
+      if (screen.kind === "modify" && screen.edit.mode === "skills") return replaceTop(state, { ...screen, edit: { ...screen.edit, focus: clamp(screen.edit.focus + event.delta, max) } });
+      if (screen.kind === "delete") return replaceTop(state, { ...screen, confirmFocus: clamp(screen.confirmFocus + event.delta, 1) as 0 | 1 });
       return state;
     }
     case "PAGE":
@@ -122,22 +138,54 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
       if (screen.kind !== "modify" || screen.edit.mode !== "menu") return state;
       if (event.option === "model") return push(state, { kind: "model", agentId: screen.agentId, focus: 0 });
       if (event.option === "effort") return push(state, { kind: "effort", agentId: screen.agentId, focus: 0 });
-      if (event.option === "skills" && screen.editable === true) return replaceTop(state, { ...screen, edit: { mode: "skills", selected: [...(event.skills ?? [])], focus: 0 } });
-      if (event.option === "operations" && screen.editable === true) return replaceTop(state, { ...screen, edit: { mode: "operations", prompt: event.operations ?? "" } });
+      if (screen.editable !== true) return event.option === "back" ? pop(state) : state;
+      if (event.option === "id" || event.option === "description") return replaceTop(state, { ...screen, edit: { mode: "text", field: event.option, value: event.value ?? "" } });
+      if (event.option === "skills") return replaceTop(state, { ...screen, edit: skillDraft(event.skills ?? []) });
+      if (event.option === "operations") return replaceTop(state, { ...screen, edit: { mode: "text", field: "operations", value: event.operations ?? event.value ?? "" } });
+      if (event.option === "delete") return push(state, { kind: "delete", agentId: screen.agentId, confirmFocus: 1 });
       return pop(state);
     case "SELECT_MODEL":
     case "SELECT_EFFORT":
       return screen.kind === "model" || screen.kind === "effort" ? pop(state) : state;
-    case "EDIT_SKILLS_TOGGLE":
+    case "EDIT_SKILLS_TOGGLE": {
       if (screen.kind !== "modify" || screen.edit.mode !== "skills") return state;
-      return replaceTop(state, { ...screen, edit: { ...screen.edit, selected: screen.edit.selected.includes(event.skill ?? "") ? screen.edit.selected.filter((skill) => skill !== event.skill) : [...screen.edit.selected, ...(event.skill ? [event.skill] : [])] } });
+      const skill = event.skill ?? screen.edit.skills[event.index];
+      if (!skill) return state;
+      const skills = screen.edit.skills.includes(skill) ? screen.edit.skills.filter((item) => item !== skill) : [...screen.edit.skills, skill];
+      return replaceTop(state, { ...screen, edit: skillDraft(skills, clamp(screen.edit.focus, skills.length), screen.edit.adding, screen.edit.input) });
+    }
+    case "EDIT_SKILLS_START_ADD":
+      return screen.kind === "modify" && screen.edit.mode === "skills" ? replaceTop(state, { ...screen, edit: skillDraft(screen.edit.skills, screen.edit.focus, true) }) : state;
+    case "EDIT_SKILLS_INPUT":
+      return screen.kind === "modify" && screen.edit.mode === "skills" && screen.edit.adding ? replaceTop(state, { ...screen, edit: skillDraft(screen.edit.skills, screen.edit.focus, true, event.value) }) : state;
+    case "EDIT_SKILLS_ADD": {
+      if (screen.kind !== "modify" || screen.edit.mode !== "skills" || !screen.edit.adding) return state;
+      const skill = screen.edit.input.trim();
+      const skills = skill && !screen.edit.skills.includes(skill) ? [...screen.edit.skills, skill] : [...screen.edit.skills];
+      return replaceTop(state, { ...screen, edit: skillDraft(skills, clamp(screen.edit.focus, skills.length)) });
+    }
+    case "EDIT_TEXT_INPUT":
+      return screen.kind === "modify" && screen.edit.mode === "text" ? replaceTop(state, { ...screen, edit: { ...screen.edit, value: event.value } }) : state;
     case "EDIT_OPERATIONS_INPUT":
-      return screen.kind === "modify" && screen.edit.mode === "operations" ? replaceTop(state, { ...screen, edit: { ...screen.edit, prompt: event.value } }) : state;
+      if (screen.kind !== "modify") return state;
+      return screen.edit.mode === "text" && screen.edit.field === "operations" ? replaceTop(state, { ...screen, edit: { ...screen.edit, value: event.value } }) : state;
     case "EDIT_COMMIT":
+      if (screen.kind !== "modify" || screen.edit.mode === "menu") return state;
+      if (!event.agentId) return replaceTop(state, { ...screen, edit: { mode: "menu" } });
+      return {
+        ...state,
+        stack: state.stack.map((item) => {
+          if (!(item.kind === "info" || item.kind === "modify" || item.kind === "model" || item.kind === "effort" || item.kind === "delete")) return item;
+          return item.agentId === screen.agentId
+            ? item.kind === "modify" ? { ...item, agentId: event.agentId!, edit: { mode: "menu" } } : { ...item, agentId: event.agentId! }
+            : item;
+        }),
+      };
     case "EDIT_CANCEL":
       return screen.kind === "modify" && screen.edit.mode !== "menu" ? replaceTop(state, { ...screen, edit: { mode: "menu" } }) : state;
     case "REQUEST_DELETE":
-      return screen.kind === "info" ? push(state, { kind: "delete", agentId: event.agentId ?? screen.agentId, confirmFocus: 0 }) : state;
+      if (screen.kind === "modify" && screen.editable === true) return push(state, { kind: "delete", agentId: screen.agentId, confirmFocus: 1 });
+      return screen.kind === "info" ? push(state, { kind: "delete", agentId: event.agentId ?? screen.agentId, confirmFocus: 1 }) : state;
     case "CONFIRM_DELETE":
     case "CANCEL_DELETE":
       return screen.kind === "delete" ? pop(state) : state;

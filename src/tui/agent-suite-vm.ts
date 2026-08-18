@@ -33,6 +33,14 @@ export function modifyOptions(row: Pick<AgentCatalogRow, "membership">): readonl
     : ["Modelo de IA", "Nivel de esfuerzo", "Volver"];
 }
 
+export type EditorField = "id" | "description" | "skills" | "operations" | "model" | "effort" | "delete";
+
+export function editorFields(row: Pick<AgentCatalogRow, "membership">): readonly EditorField[] {
+  return row.membership === "custom"
+    ? ["id", "description", "skills", "operations", "model", "effort", "delete"]
+    : ["model", "effort"];
+}
+
 export function truncate(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, Math.max(0, maxLength - 1))}…`;
