@@ -23,6 +23,11 @@ import type { CreateDraft, AppScreen } from "./agent-suite-nav.ts";
 import { screenKeyHints, screenKeyHintsForScreen, selectionErrorPresentation, StatusBadge } from "./visual-primitives.tsx";
 import { validateSkillInput } from "./screens/modify-panel.tsx";
 import { isSubmitKey } from "./key-handling.ts";
+import { SkillPicker } from "./screens/skill-picker.tsx";
+import type { SkillCandidate } from "../core/skill-catalog.ts";
+import { AiPreview, type AiPreviewAction } from "./screens/ai-preview.tsx";
+import { runAuthoringConversation, type CoordinatorSession } from "../core/coordinator.ts";
+import type { CoordinatorConfig as CoordinatorConfigShape } from "../core/types.ts";
 
 export interface AgentSuiteAppProps {
   theme: TuiTheme;
@@ -32,6 +37,8 @@ export interface AgentSuiteAppProps {
   modelOptions?: (row: import("../core/types.ts").AgentCatalogRow) => readonly TuiDialogSelectOption<string>[];
   variantOptions?: (row: import("../core/types.ts").AgentCatalogRow, model: string) => readonly TuiDialogSelectOption<string>[];
   coordinatorProviders?: readonly RuntimeCoordinatorProvider[];
+  installedSkills?: () => Promise<readonly SkillCandidate[]>;
+  coordinatorSession?: CoordinatorSession;
 }
 
 export async function applyBaseDeactivation(controller: AgentSuiteController, agentId: string, dispatch: (event: NavEvent) => void): Promise<string | undefined> {
@@ -97,20 +104,20 @@ function eventForKey(key: KeyEvent, state: NavState, catalogRowCount = 0, focuse
     if (screen.kind === "modify" && (screen.edit.mode === "text" || screen.edit.mode === "operations" || screen.edit.mode === "skills" && screen.edit.adding)) return undefined;
     return screen.kind === "landing" ? { type: "REQUEST_CLOSE" } : { type: "BACK" };
   }
-  const ownsKeyboardInput = screen.kind === "catalog" && screen.searchFocused === true
+  const ownsKeyboardInput = screen.kind === "catalog" && screen.searchFocused === true || screen.kind === "skill-picker"
     || screen.kind === "modify" && screen.edit.mode !== "menu"
     || screen.kind === "create";
-  if (key.name === "f10") return ownsKeyboardInput ? undefined : { type: "REQUEST_CLOSE" };
+  if (key.name === "f10") return screen.kind === "modify" && screen.edit.mode === "menu" ? { type: "FINALIZE_MODIFY" } : ownsKeyboardInput ? undefined : { type: "REQUEST_CLOSE" };
   if (screen.kind === "catalog" && screen.searchFocused) {
     return undefined;
   }
-  if (screen.kind === "create" || screen.kind === "modify" && (screen.edit.mode === "text" || screen.edit.mode === "operations" || screen.edit.mode === "skills" && screen.edit.adding)) return undefined;
+  if (screen.kind === "create" || screen.kind === "skill-picker" || screen.kind === "modify" && (screen.edit.mode === "text" || screen.edit.mode === "operations" || screen.edit.mode === "skills" && screen.edit.adding)) return undefined;
   if (key.name === "/" && screen.kind === "catalog") return { type: "FOCUS_CATALOG_SEARCH" };
   if (key.name === "f2") return { type: "ACTIVATE_LANDING_ITEM", index: 0 };
   if (key.name === "f3") return { type: "ACTIVATE_LANDING_ITEM", index: 1 };
   if (key.name === "f5" && screen.kind === "info") return options.isDisabled === true ? undefined : { type: "OPEN_MODIFY", agentId: screen.agentId, custom: options.isCustom };
   if (key.name === "f8" && screen.kind === "info") return options.isCustom === true ? { type: "REQUEST_DELETE", agentId: screen.agentId } : undefined;
-  const maxFocus = screen.kind === "landing" ? 2 : screen.kind === "catalog" ? Math.max(0, Math.min(5, catalogRowCount - screen.page * 6 - 1)) : screen.kind === "info" ? Math.max(0, (options.infoActionCount ?? 1) - 1) : screen.kind === "modify" ? screen.edit.mode === "skills" ? screen.edit.skills.length : Math.max(0, (options.modifyOptionCount ?? 1) - 1) : screen.kind === "model" ? Math.max(0, (options.models?.length ?? 0) - 1) : screen.kind === "effort" ? Math.max(0, (options.efforts?.length ?? 1) - 1) : screen.kind === "coordinator" ? Math.max(0, (options.coordinatorOptions?.length ?? 1) - 1) : screen.kind === "delete" ? 1 : undefined;
+  const maxFocus = screen.kind === "landing" ? 2 : screen.kind === "catalog" ? Math.max(0, Math.min(5, catalogRowCount - screen.page * 6 - 1)) : screen.kind === "info" ? Math.max(0, (options.infoActionCount ?? 1) - 1) : screen.kind === "modify" ? screen.edit.mode === "skills" ? screen.edit.skills.length : Math.max(0, (options.modifyOptionCount ?? 1) - 1) : screen.kind === "model" ? Math.max(0, (options.models?.length ?? 0) - 1) : screen.kind === "effort" ? Math.max(0, (options.efforts?.length ?? 1) - 1) : screen.kind === "coordinator" ? Math.max(0, (options.coordinatorOptions?.length ?? 1) - 1) : screen.kind === "ai-preview" ? 2 : screen.kind === "ai-gate" || screen.kind === "delete" ? 1 : undefined;
   if (key.name === "up" || key.name === "left") return { type: "MOVE_FOCUS", delta: -1, maxFocus };
   if (key.name === "down" || key.name === "right") return { type: "MOVE_FOCUS", delta: 1, maxFocus };
   if (key.name === "pageup") return screen.kind === "catalog" ? { type: "PAGE", delta: -1, maxPage: Math.max(0, Math.ceil(catalogRowCount / 6) - 1) } : undefined;
@@ -137,11 +144,13 @@ function eventForKey(key: KeyEvent, state: NavState, catalogRowCount = 0, focuse
     if (screen.kind === "coordinator") {
       if (screen.stage === "settings") return { type: "OPEN_COORDINATOR_SETUP" };
       const value = options.coordinatorOptions?.[screen.focus];
-      if (value === undefined) return undefined;
+      if (!value) return undefined;
       if (screen.stage === "provider") return { type: "SELECT_COORDINATOR_PROVIDER", provider: value };
       if (screen.stage === "model") return { type: "SELECT_COORDINATOR_MODEL", model: value };
       return { type: "SELECT_COORDINATOR_EFFORT", effort: value };
     }
+    if (screen.kind === "ai-gate") return screen.focus === 0 ? { type: "CONFIGURE_AI_GATE" } : { type: "CANCEL_AI_GATE" };
+    if (screen.kind === "ai-preview") return screen.focus === 0 ? { type: "AI_PREVIEW_APPROVE" } : screen.focus === 1 ? { type: "AI_PREVIEW_REQUEST_CHANGES" } : { type: "AI_PREVIEW_DISCARD" };
     if (screen.kind === "delete") return screen.confirmFocus === 0 ? { type: "CONFIRM_DELETE" } : { type: "CANCEL_DELETE" };
   }
   return undefined;
@@ -323,11 +332,49 @@ export async function applyCreateSubmission(controller: AgentSuiteController, dr
   }
 }
 
+export async function finalizeCreateSubmission(controller: AgentSuiteController, draft: CreateDraft, dispatch: (event: NavEvent) => void, close: () => void): Promise<string | undefined> {
+  const error = await applyCreateSubmission(controller, draft, dispatch);
+  if (!error) close();
+  return error;
+}
+
+export async function finalizeModifySubmission(save: () => Promise<string | undefined>, close: () => void): Promise<string | undefined> {
+  const error = await save();
+  if (!error) close();
+  return error;
+}
+
+export async function finalizeModifyController(controller: AgentSuiteController, close: () => void): Promise<string | undefined> {
+  try {
+    return await finalizeModifySubmission(async () => { controller.refresh(); return undefined; }, close);
+  } catch (error) {
+    return operationErrorMessage(error);
+  }
+}
+
+export function shouldRequestAuthoring(hasSession: boolean, aiApproved: boolean, busy: boolean, step: number): boolean {
+  return hasSession && !aiApproved && !busy && step === 3;
+}
+
+export async function runCreateAuthoring(session: CoordinatorSession | undefined, coordinator: CoordinatorConfigShape | undefined, draft: CreateDraft, signal: AbortSignal, dispatch: (event: NavEvent) => void, onProgress?: (text: string) => void): Promise<string | undefined> {
+  if (!session || !coordinator) return undefined;
+  try {
+    const parsed = await runAuthoringConversation({ session, coordinator, description: draft.description, operations: draft.operations, signal, onProgress });
+    dispatch({ type: "OPEN_AI_PREVIEW", draft: { id: parsed.id, description: parsed.description, operations: parsed.operations, model: parsed.model, effort: parsed.effort, skills: parsed.skills } });
+    return undefined;
+  } catch (error) {
+    return operationErrorMessage(error);
+  }
+}
+
 export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
   const [state, setState] = createSignal(initialNavState());
   const [renderError, setRenderError] = createSignal<string>();
   const [operationError, setOperationError] = createSignal<string>();
   const [busy, setBusy] = createSignal(false);
+  const [authoringUnavailable, setAuthoringUnavailable] = createSignal(false);
+  const [authoringProgress, setAuthoringProgress] = createSignal<string>();
+  let authoringAbort: AbortController | undefined;
   let catalogSearchDraft = "";
   const catalogRows = () => {
     const snapshot = props.controller.snapshot();
@@ -374,7 +421,15 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
   const runCreate = (draft: CreateDraft) => {
     if (busy()) return;
     setBusy(true);
-    void applyCreateSubmission(props.controller, draft, dispatch).then((error) => setOperationError(error)).finally(() => setBusy(false));
+    void finalizeCreateSubmission(props.controller, draft, dispatch, props.onClose).then((error) => setOperationError(error)).finally(() => setBusy(false));
+  };
+  const runAuthoring = (draft: CreateDraft) => {
+    if (busy()) return;
+    authoringAbort = new AbortController();
+    setBusy(true);
+    setOperationError(undefined);
+    setAuthoringProgress("Generando borrador…");
+    void runCreateAuthoring(props.coordinatorSession, props.controller.coordinator?.(), draft, authoringAbort.signal, dispatch, setAuthoringProgress).then((error) => { setAuthoringUnavailable(Boolean(error)); setOperationError(error); }).finally(() => { authoringAbort = undefined; setAuthoringProgress(undefined); setBusy(false); });
   };
   const advanceCreate = (current: Extract<AppScreen, { kind: "create" }>) => setOperationError(advanceCreateDraft(current.draft, current.step, dispatch));
   const handleNestedEscape = () => handleNestedScreenEscape(state(), dispatch, catalogSearchDraft);
@@ -387,6 +442,10 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
     const current = currentNavigation.stack.at(-1);
     if (current?.kind === "delete" && isSubmitKey(key)) {
       void handleDeleteKey(key, current, props.controller, dispatch, setOperationError, setBusy);
+      return;
+    }
+    if (key.name === "escape" && authoringAbort) {
+      authoringAbort.abort();
       return;
     }
     if (current?.kind === "modify" && current.edit.mode === "skills") {
@@ -433,9 +492,14 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
     })());
     if (!event) return;
     if (event.type === "SELECT_COORDINATOR_EFFORT") {
-      void handleCoordinatorSelectionKey(key, event, currentNavigation, props.controller, dispatch, setOperationError, setBusy).then((handled) => {
-        if (!handled) dispatch(event);
-      });
+      void handleCoordinatorSelectionKey(key, event, currentNavigation, props.controller, dispatch, setOperationError, setBusy);
+      return;
+    }
+    if (event.type === "FINALIZE_MODIFY" && current?.kind === "modify") {
+      key.preventDefault();
+      key.stopPropagation();
+      setBusy(true);
+      void finalizeModifyController(props.controller, () => { dispatch({ type: "FINALIZE_MODIFY" }); props.onClose(); }).then((error) => setOperationError(error)).finally(() => setBusy(false));
       return;
     }
     if (event.type === "SELECT_MODEL" || event.type === "SELECT_EFFORT") {
@@ -451,7 +515,7 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
   const snapshot = () => props.controller.snapshot();
   return (
     <SuiteShell theme={props.theme} title={screenTitle(screen())} keybar={suiteScreenKeybar(screen(), Boolean(renderError()), (() => { const current = screen(); const row = "agentId" in current ? [...snapshot().rows, ...(snapshot().disabledRows ?? [])].find((item) => item.id === current.agentId) : undefined; return row ? { canDelete: row.membership === "custom" && row.disabled !== true, canDeactivate: row.membership === "seed" && row.disabled !== true, canReactivate: row.disabled === true } : undefined; })())}>
-      {busy() ? <StatusBadge theme={props.theme} status="info">Guardando cambios…</StatusBadge> : null}
+      {busy() ? <StatusBadge theme={props.theme} status="info">{authoringProgress() ?? "Guardando cambios…"}</StatusBadge> : null}
       {renderError() ? <ErrorPanel theme={props.theme} message={renderError()!} onRetry={() => setRenderError(undefined)} onClose={props.onClose} /> : (() => {
         const current = screen();
         if (current.kind === "landing") return <Landing theme={props.theme} focus={current.focus} coordinator={props.controller.coordinator?.()} onActivate={(index) => dispatch({ type: "ACTIVATE_LANDING_ITEM", index })} />;
@@ -459,18 +523,22 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
           const catalogRows = [...snapshot().rows, ...(snapshot().disabledRows ?? [])];
            return <Catalog theme={props.theme} rows={catalogRows} page={current.page} focus={current.focus} query={current.query} searchFocused={current.searchFocused} onDraftChange={(value) => { catalogSearchDraft = value; }} onFocusResults={(query) => dispatch({ type: "FOCUS_CATALOG_RESULTS", query })} onFocusSearch={() => { catalogSearchDraft = current.query; dispatch({ type: "FOCUS_CATALOG_SEARCH" }); }} onMoveFocus={(delta, maxFocus) => dispatch({ type: "MOVE_FOCUS", delta, maxFocus })} onActivate={(identity) => dispatch({ type: "ACTIVATE_AGENT", agentId: identity.agentId })} onPage={(delta) => dispatch({ type: "PAGE", delta, maxPage: Math.max(0, Math.ceil(filterCatalogRows(catalogRows, current.searchFocused ? catalogSearchDraft : current.query).length / 6) - 1) })} />;
         }
-        if (current.kind === "coordinator") {
-          const providers = props.coordinatorProviders ?? [];
-          return <CoordinatorConfig theme={props.theme} stage={current.stage} focus={current.focus} coordinator={props.controller.coordinator?.()} providers={providers} provider={current.provider} model={current.model} onSetup={() => dispatch({ type: "OPEN_COORDINATOR_SETUP" })} onProvider={(provider) => dispatch({ type: "SELECT_COORDINATOR_PROVIDER", provider })} onModel={(model) => dispatch({ type: "SELECT_COORDINATOR_MODEL", model })} onEffort={(effort) => { if (!current.provider || !current.model) return; setOperationError(undefined); void applyCoordinatorSelection(props.controller, current.provider, current.model, effort, dispatch, setBusy).catch((caught) => setOperationError(operationErrorMessage(caught))); }} />;
-        }
-           const catalogSource = current.kind === "info" || current.kind === "modify" || current.kind === "model" || current.kind === "effort" || current.kind === "delete" ? (current as { agentId: string }).agentId : undefined;
+            if (current.kind === "coordinator") {
+              const providers = props.coordinatorProviders ?? [];
+              const values = current.stage === "settings" ? [] : coordinatorSelectionOptions(current.stage, providers, current.provider, current.model).map((option) => option.value);
+              return <CoordinatorConfig theme={props.theme} stage={current.stage} focus={current.focus} coordinator={props.controller.coordinator?.()} providers={providers} provider={current.provider} model={current.model} onSetup={() => dispatch({ type: "OPEN_COORDINATOR_SETUP" })} onProvider={(provider) => dispatch({ type: "SELECT_COORDINATOR_PROVIDER", provider })} onModel={(model) => dispatch({ type: "SELECT_COORDINATOR_MODEL", model })} onEffort={(effort) => { if (!current.provider || !current.model) return; setOperationError(undefined); void applyCoordinatorSelection(props.controller, current.provider, current.model, effort, dispatch, setBusy).catch((caught) => setOperationError(operationErrorMessage(caught))); }} />;
+            }
+            if (current.kind === "skill-picker") return <SkillPicker theme={props.theme} installed={current.installed} selected={current.selected} query={current.query} focus={current.focus} onQuery={(value) => dispatch({ type: "SKILL_PICKER_QUERY", value })} onToggle={(skill) => dispatch({ type: "SKILL_PICKER_TOGGLE", skill })} />;
+        if (current.kind === "ai-gate") return <box flexDirection="column" gap={1}><text fg={props.theme.current.error}>Configura un coordinador para continuar.</text><text fg={props.theme.current.text}>Configurar ahora</text><text fg={props.theme.current.textMuted}>Cancelar</text></box>;
+        if (current.kind === "ai-preview") return <AiPreview theme={props.theme} draft={current.draft} focus={current.focus} onAction={(action: AiPreviewAction) => dispatch({ type: action === "Approve" ? "AI_PREVIEW_APPROVE" : action === "Request changes" ? "AI_PREVIEW_REQUEST_CHANGES" : "AI_PREVIEW_DISCARD" })} />;
+            const catalogSource = current.kind === "info" || current.kind === "modify" || current.kind === "model" || current.kind === "effort" || current.kind === "delete" ? (current as { agentId: string }).agentId : undefined;
            const row = catalogSource ? [...snapshot().rows, ...(snapshot().disabledRows ?? [])].find((item) => item.id === catalogSource) : undefined;
            if (current.kind === "info") return row ? <AgentInfo theme={props.theme} row={row} operations={props.controller.operations?.(row.id)} focus={current.focus} onModify={() => dispatch({ type: "OPEN_MODIFY", agentId: row.id, custom: row.membership === "custom" })} onDelete={() => { if (row.membership === "custom") dispatch({ type: "REQUEST_DELETE", agentId: row.id }); }} onDeactivate={() => dispatch({ type: "DEACTIVATE_AGENT", agentId: row.id })} onReactivate={() => dispatch({ type: "REACTIVATE_AGENT", agentId: row.id })} onBack={() => dispatch({ type: "BACK" })} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>;
-           if (current.kind === "modify") return row ? <ModifyPanel theme={props.theme} row={row} protectedBase={current.protectedBase} operations={props.controller.operations?.(row.id)} focus={current.focus} edit={current.edit} busy={busy()} error={operationError()} onActivate={(option) => { setOperationError(undefined); dispatch({ type: "MODIFY_ACTIVATE", option, skills: row.skills, operations: props.controller.operations?.(row.id) ?? "", value: option === "id" ? row.id : option === "description" ? row.description ?? "" : undefined }); }} onToggleSkill={(index, skill) => dispatch({ type: "EDIT_SKILLS_TOGGLE", index, skill })} onStartSkillAdd={() => dispatch({ type: "EDIT_SKILLS_START_ADD" })} onSkillAdd={(value?: string) => runInlineEdit(current, value)} onCommit={(value?: string) => runInlineEdit(current, value)} onCancel={() => { setOperationError(undefined); dispatch({ type: "EDIT_CANCEL" }); }} onBack={() => { setOperationError(undefined); dispatch({ type: "BACK" }); }} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>;
+        if (current.kind === "modify") return row ? <ModifyPanel theme={props.theme} row={row} protectedBase={current.protectedBase} operations={props.controller.operations?.(row.id)} focus={current.focus} edit={current.edit} busy={busy()} error={operationError()} onActivate={(option) => { setOperationError(undefined); dispatch({ type: "MODIFY_ACTIVATE", option, skills: row.skills, operations: props.controller.operations?.(row.id) ?? "", value: option === "id" ? row.id : option === "description" ? row.description ?? "" : undefined }); }} onToggleSkill={(index, skill) => dispatch({ type: "EDIT_SKILLS_TOGGLE", index, skill })} onStartSkillAdd={() => { if (!props.installedSkills) return dispatch({ type: "EDIT_SKILLS_START_ADD" }); setOperationError(undefined); setBusy(true); void props.installedSkills().then((installed) => dispatch({ type: "OPEN_SKILL_PICKER", installed })).catch((error) => setOperationError(operationErrorMessage(error))).finally(() => setBusy(false)); }} onSkillAdd={(value?: string) => runInlineEdit(current, value)} onCommit={(value?: string) => runInlineEdit(current, value)} onCancel={() => { setOperationError(undefined); dispatch({ type: "EDIT_CANCEL" }); }} onBack={() => { setOperationError(undefined); dispatch({ type: "BACK" }); }} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>;
           if (current.kind === "model") { const options = row ? props.modelOptions?.(row) ?? [] : []; const error = selectionErrorPresentation(operationError()); return row ? <ModelSelect theme={props.theme} row={row} models={options.map((option) => option.value)} modelOptions={options} currentValue={row.model} focus={current.focus} error={error?.message} onSelect={(model) => { setOperationError(undefined); void applyModelSelection(props.controller, row.id, model, dispatch, setBusy).catch((caught) => setOperationError(operationErrorMessage(caught))); }} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>; }
          if (current.kind === "effort") { const options = row ? (props.variantOptions?.(row, row.model ?? "") ?? [{ title: "default", value: "" }]).map((option) => option.value || "default") : []; const error = selectionErrorPresentation(operationError()); return row ? <EffortSelect theme={props.theme} row={row} variants={options} focus={current.focus} error={error?.message} onSelect={(effort) => { setOperationError(undefined); void applyEffortSelection(props.controller, row.id, effort, dispatch, setBusy).catch((caught) => setOperationError(operationErrorMessage(caught))); }} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>; }
          if (current.kind === "delete") return row ? <DeleteWarning theme={props.theme} row={row} focus={current.confirmFocus} error={operationError()} onConfirm={() => { setOperationError(undefined); setBusy(true); void confirmDelete(props.controller, row.id, dispatch).then((error) => setOperationError(error)).finally(() => setBusy(false)); }} onCancel={() => { setOperationError(undefined); void cancelDelete(props.controller, row.id, dispatch); }} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>;
-        if (current.kind === "create") return <CreateAgent theme={props.theme} draft={current.draft} step={current.step} focus={current.focus} error={operationError()} onInput={(field, value) => dispatch({ type: "CREATE_INPUT", field, value })} onNext={() => advanceCreate(current)} onPrevious={() => dispatch({ type: "CREATE_PREV" })} onSubmit={() => runCreate(current.draft)} />;
+        if (current.kind === "create") return <CreateAgent theme={props.theme} draft={current.draft} step={current.step} focus={current.focus} error={operationError()} onInput={(field, value) => dispatch({ type: "CREATE_INPUT", field, value })} onNext={() => advanceCreate(current)} onPrevious={() => dispatch({ type: "CREATE_PREV" })} canAuthor={shouldRequestAuthoring(Boolean(props.coordinatorSession && props.controller.coordinator?.()) && !authoringUnavailable(), current.aiApproved === true, busy(), current.step)} onAuthor={() => { const authoring = navigationState().stack.at(-1); if (authoring?.kind === "create") runAuthoring(authoring.draft); }} onSubmit={() => runCreate(current.draft)} />;
         return <text fg={props.theme.current.textMuted}>{operationError() ?? "Pantalla en preparación"}</text>;
       })()}
     </SuiteShell>
