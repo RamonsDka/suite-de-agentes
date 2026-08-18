@@ -63,6 +63,13 @@ describe("task policy", () => {
     expect(result.general).toBe("deny");
   });
 
+  it("removes disabled internal targets from the task permission allowlist", () => {
+    const result = transformTaskPermission(["sdd-apply"]);
+    expect(result["*"]).toBe("deny");
+    expect(result["sdd-apply"]).toBeUndefined();
+    expect(result["sdd-apply-fallback"]).toBe("ask");
+  });
+
   it("retains the primary SDD list as an exact compatibility subset", () => {
     expect([...SDD_AGENT_ALLOWLIST]).toEqual([
       "sdd-init", "sdd-explore", "sdd-onboard", "sdd-propose", "sdd-spec",
