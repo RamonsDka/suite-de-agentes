@@ -43,6 +43,16 @@ export function handleNestedScreenEscape(state: NavState, dispatch: (event: NavE
   return true;
 }
 
+function modifyOptionAtFocus(row: Pick<import("../core/types.ts").AgentCatalogRow, "membership"> | undefined, focus: number): "model" | "effort" | "skills" | "operations" | "back" {
+  const labels = row ? modifyOptions(row) : ["model", "effort", "skills", "operations", "back"];
+  const option = labels[focus];
+  return option === "Modelo de IA" || option === "model" ? "model"
+    : option === "Nivel de esfuerzo" || option === "effort" ? "effort"
+      : option === "Skills" || option === "skills" ? "skills"
+        : option === "Operaciones" || option === "operations" ? "operations"
+          : "back";
+}
+
 function eventForKey(key: KeyEvent, state: NavState, catalogRowCount = 0, focusedCatalogAgentId?: string, options: { infoActionCount?: number; modifyOptionCount?: number; focusedModel?: string; focusedEffort?: string; models?: readonly string[]; efforts?: readonly string[]; canDelete?: boolean; isCustom?: boolean } = {}): NavEvent | undefined {
   const screen = state.stack.at(-1);
   if (!screen || state.closing) return undefined;
@@ -63,7 +73,7 @@ function eventForKey(key: KeyEvent, state: NavState, catalogRowCount = 0, focuse
     if (screen.kind === "landing") return { type: "ACTIVATE_LANDING_ITEM", index: screen.focus };
     if (screen.kind === "catalog" && focusedCatalogAgentId) return { type: "ACTIVATE_AGENT", agentId: focusedCatalogAgentId };
     if (screen.kind === "info") return screen.focus === 0 ? { type: "OPEN_MODIFY", agentId: screen.agentId, custom: options.isCustom } : screen.focus === 1 && options.isCustom === true ? { type: "REQUEST_DELETE", agentId: screen.agentId } : { type: "BACK" };
-    if (screen.kind === "modify" && screen.edit.mode === "menu") return { type: "MODIFY_ACTIVATE", option: ["model", "effort", "skills", "operations", "back"][screen.focus] as "model" | "effort" | "skills" | "operations" | "back" };
+    if (screen.kind === "modify" && screen.edit.mode === "menu") return { type: "MODIFY_ACTIVATE", option: modifyOptionAtFocus(options.isCustom === undefined ? undefined : { membership: options.isCustom ? "custom" : "seed" }, screen.focus) };
     if (screen.kind === "modify" && screen.edit.mode === "skills") return { type: "EDIT_COMMIT" };
     if (screen.kind === "modify" && screen.edit.mode === "operations") return { type: "EDIT_COMMIT" };
     if (screen.kind === "model" && options.focusedModel) return { type: "SELECT_MODEL", model: options.focusedModel };
@@ -224,7 +234,7 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
         if (current.kind === "landing") return <Landing theme={props.theme} focus={current.focus} onActivate={(index) => dispatch({ type: "ACTIVATE_LANDING_ITEM", index })} />;
         if (current.kind === "catalog") return <Catalog theme={props.theme} rows={snapshot().rows} page={current.page} focus={current.focus} onActivate={(identity) => dispatch({ type: "ACTIVATE_AGENT", agentId: identity.agentId })} onPage={(delta) => dispatch({ type: "PAGE", delta, maxPage: Math.max(0, Math.ceil(snapshot().rows.length / 6) - 1) })} />;
          const row = "agentId" in current ? snapshot().rows.find((item) => item.id === current.agentId) : undefined;
-         if (current.kind === "info") return row ? <AgentInfo theme={props.theme} row={row} focus={current.focus} onModify={() => dispatch({ type: "OPEN_MODIFY", agentId: row.id, custom: row.membership === "custom" })} onDelete={() => { if (row.membership === "custom") dispatch({ type: "REQUEST_DELETE", agentId: row.id }); }} onBack={() => dispatch({ type: "BACK" })} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>;
+         if (current.kind === "info") return row ? <AgentInfo theme={props.theme} row={row} operations={props.controller.operations?.(row.id)} focus={current.focus} onModify={() => dispatch({ type: "OPEN_MODIFY", agentId: row.id, custom: row.membership === "custom" })} onDelete={() => { if (row.membership === "custom") dispatch({ type: "REQUEST_DELETE", agentId: row.id }); }} onBack={() => dispatch({ type: "BACK" })} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>;
          if (current.kind === "modify") return row ? <ModifyPanel theme={props.theme} row={row} focus={current.focus} edit={current.edit} error={operationError()} onActivate={(option) => dispatch({ type: "MODIFY_ACTIVATE", option, skills: row.skills, operations: props.controller.operations?.(row.id) ?? "" })} onToggleSkill={(_index, skill) => dispatch({ type: "EDIT_SKILLS_TOGGLE", index: current.edit.mode === "skills" ? current.edit.focus : 0, skill })} onOperationsInput={(value) => dispatch({ type: "EDIT_OPERATIONS_INPUT", value })} onCommit={() => runInlineEdit(current)} onCancel={() => dispatch({ type: "EDIT_CANCEL" })} onBack={() => dispatch({ type: "BACK" })} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>;
          if (current.kind === "model") { const options = row ? props.modelOptions?.(row) ?? [] : []; return row ? <ModelSelect theme={props.theme} row={row} models={options.map((option) => option.value)} modelOptions={options} focus={current.focus} onSelect={(model) => void applyModelSelection(props.controller, row.id, model, dispatch, setBusy).catch((error) => setOperationError(error instanceof Error ? error.message : String(error)))} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>; }
          if (current.kind === "effort") { const options = row ? (props.variantOptions?.(row, row.model ?? "") ?? [{ title: "default", value: "" }]).map((option) => option.value || "default") : []; return row ? <EffortSelect theme={props.theme} row={row} variants={options} focus={current.focus} onSelect={(effort) => void applyEffortSelection(props.controller, row.id, effort, dispatch, setBusy).catch((error) => setOperationError(error instanceof Error ? error.message : String(error)))} /> : <text fg={props.theme.current.textMuted}>Agente no encontrado.</text>; }

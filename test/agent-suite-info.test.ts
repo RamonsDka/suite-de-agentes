@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatAgentInfo, infoActionKeys } from "../src/tui/screens/agent-info.tsx";
+import { agentInfoSections } from "../src/tui/visual-primitives.tsx";
+import { AGENT_INFO_DETAIL_LAYOUT, agentInfoDisplaySections, agentInfoStatus, formatAgentInfo, infoActionKeys } from "../src/tui/screens/agent-info.tsx";
 
 const row = {
   id: "custom-agent",
@@ -34,5 +35,24 @@ describe("Agent Suite info screen", () => {
       "Modelo: modelo pendiente",
       "Esfuerzo: predeterminado",
     ]);
+  });
+
+  it("uses the canonical structured sections and bounds long detail values", () => {
+    const longDescription = "descripción extensa ".repeat(8);
+    const longOperations = "operación extensa ".repeat(8);
+    const sections = agentInfoSections({ ...row, description: longDescription }, longOperations);
+    const displayed = agentInfoDisplaySections({ ...row, description: longDescription }, longOperations);
+
+    expect(sections.map(({ title }) => title)).toEqual(["Identidad y estado", "Descripción", "Modelo y esfuerzo", "Skills y operaciones"]);
+    expect(displayed).toHaveLength(4);
+    expect(displayed[1]?.fields).toEqual([["Descripción", `${longDescription.slice(0, 58)}…`]]);
+    expect(displayed.flatMap(({ fields }) => fields).every(([label, value]) => `${label}: ${value}`.length <= 72)).toBe(true);
+    expect(AGENT_INFO_DETAIL_LAYOUT).toMatchObject({ flexGrow: 1, flexShrink: 1, minHeight: 0, maxHeight: 8, overflow: "scroll" });
+  });
+
+  it("selects a semantic state badge without changing state copy", () => {
+    expect(agentInfoStatus(row)).toBe("success");
+    expect(agentInfoStatus({ ...row, enabled: false })).toBe("warning");
+    expect(agentInfoStatus({ ...row, membership: "seed", enabled: false })).toBe("info");
   });
 });

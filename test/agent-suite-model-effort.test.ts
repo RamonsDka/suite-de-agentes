@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { initialNavState, reduceNav, type NavState } from "../src/tui/agent-suite-nav.ts";
-import { EffortSelect, effortSelectionOptions } from "../src/tui/screens/effort-select.tsx";
-import { ModelSelect, modelSelectionOptions } from "../src/tui/screens/model-select.tsx";
+import { EffortSelect, effortSelectionOptions, effortSelectionRows } from "../src/tui/screens/effort-select.tsx";
+import { MODEL_EMPTY_MESSAGE, ModelSelect, modelSelectionOptions, modelSelectionRows } from "../src/tui/screens/model-select.tsx";
 import { applyEffortSelection, applyModelSelection } from "../src/tui/agent-suite-app.tsx";
 import type { AgentSuiteController } from "../src/tui/agent-suite-controller.ts";
 import { buildAgentModelOptions, buildAgentVariantOptions, buildRuntimeModelOptions } from "../src/tui/index.tsx";
@@ -34,6 +34,19 @@ describe("Agent Suite model and effort screens", () => {
     expect(effortSelectionOptions(["x-high", "low", "unknown"])).toEqual(["default", "low", "xhigh"]);
     expect(ModelSelect).toBeTypeOf("function");
     expect(EffortSelect).toBeTypeOf("function");
+  });
+
+  it("keeps shared selectable-row presentation data and the Spanish empty-model state", () => {
+    expect(modelSelectionRows(modelSelectionOptions(["openai/gpt-5", "anthropic/claude-sonnet"]), 1)).toEqual([
+      { title: "openai/gpt-5", value: "openai/gpt-5", selected: false },
+      { title: "anthropic/claude-sonnet", value: "anthropic/claude-sonnet", selected: true },
+    ]);
+    expect(effortSelectionRows(["x-high", "low"], 2)).toEqual([
+      { value: "default", selected: false },
+      { value: "low", selected: false },
+      { value: "xhigh", selected: true },
+    ]);
+    expect(MODEL_EMPTY_MESSAGE).toBe("No hay modelos disponibles.");
   });
 
   it("passes runtime catalogs through helpers without inventing a model", () => {

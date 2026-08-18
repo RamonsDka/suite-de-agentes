@@ -1,8 +1,9 @@
 import type { JSX } from "@opentui/solid";
 import type { TuiTheme } from "@opencode-ai/plugin/tui";
 import type { AgentCatalogRow } from "../../core/types.ts";
-import { focusMarker, modifyOptions, truncate } from "../agent-suite-vm.ts";
+import { modifyOptions, truncate } from "../agent-suite-vm.ts";
 import type { ModifyEdit } from "../agent-suite-nav.ts";
+import { FieldRow, KeyHintBar, SectionPanel, SelectableRow } from "../visual-primitives.tsx";
 
 export interface ModifyPanelProps {
   theme: TuiTheme;
@@ -25,23 +26,33 @@ export function modifyOptionKey(label: string): ModifyOption | undefined {
   return labels[label];
 }
 
+export interface ModifyMenuRow {
+  label: string;
+  option: ModifyOption;
+  selected: boolean;
+}
+
+export function modifyMenuRows(row: Pick<AgentCatalogRow, "membership">, focus: number): readonly ModifyMenuRow[] {
+  return modifyOptions(row).map((label, index) => ({ label, option: modifyOptionKey(label)!, selected: focus === index }));
+}
+
 export function ModifyPanel(props: ModifyPanelProps): JSX.Element {
   const colors = () => props.theme.current;
-  const labels = () => modifyOptions(props.row);
   const edit = () => props.edit ?? { mode: "menu" as const };
   if (edit().mode === "skills") {
     const skillsEdit = edit() as Extract<ModifyEdit, { mode: "skills" }>;
     return (
     <box flexDirection="column" gap={1}>
-      <text fg={colors().textMuted}>Skills pendientes</text>
-      {props.row.skills.map((skill, index) => <box backgroundColor={skillsEdit.selected.includes(skill) ? colors().backgroundMenu : colors().backgroundPanel} onMouseDown={(event) => {
+      <SectionPanel theme={props.theme} title="Skills pendientes">
+      {props.row.skills.map((skill, index) => <SelectableRow theme={props.theme} selected={skillsEdit.focus === index} onMouseDown={(event) => {
         if (event.button !== 0) return;
         event.preventDefault();
         event.stopPropagation();
         props.onToggleSkill?.(index, skill);
-      }}><text fg={skillsEdit.selected.includes(skill) ? colors().selectedListItemText : colors().text}>{focusMarker(index, skillsEdit.focus)} {skill}</text></box>)}
+      }}>{skillsEdit.selected.includes(skill) ? "✓ " : ""}{skill}</SelectableRow>)}
+      </SectionPanel>
       {props.error ? <text fg={colors().error}>{props.error}</text> : null}
-      <text fg={colors().textMuted}>Enter guardar · Esc cancelar</text>
+      <KeyHintBar theme={props.theme} hints="Enter guardar · Esc cancelar" />
     </box>
   );
   }
@@ -49,24 +60,26 @@ export function ModifyPanel(props: ModifyPanelProps): JSX.Element {
     const operationsEdit = edit() as Extract<ModifyEdit, { mode: "operations" }>;
     return (
     <box flexDirection="column" gap={1}>
-      <text fg={colors().textMuted}>Operaciones pendientes</text>
+      <SectionPanel theme={props.theme} title="Operaciones pendientes">
       <input focused value={operationsEdit.prompt} onInput={(value) => props.onOperationsInput?.(value)} onSubmit={() => props.onCommit?.()} />
+      </SectionPanel>
       {props.error ? <text fg={colors().error}>{props.error}</text> : null}
-      <text fg={colors().textMuted}>Enter guardar · Esc cancelar</text>
+      <KeyHintBar theme={props.theme} hints="Enter guardar · Esc cancelar" />
     </box>
     );
   }
   return (
     <box flexDirection="column" gap={1}>
-      <text fg={colors().textMuted}>{truncate(`Agente: ${props.row.id}`, 72)}</text>
-      {labels().map((label, index) => <box backgroundColor={props.focus === index ? colors().backgroundMenu : colors().backgroundPanel} onMouseDown={(event) => {
+      <SectionPanel theme={props.theme} title="Configuración">
+      <FieldRow theme={props.theme} label="Agente" value={truncate(props.row.id, 72)} />
+      {modifyMenuRows(props.row, props.focus).map((row) => <SelectableRow theme={props.theme} selected={row.selected} onMouseDown={(event) => {
         if (event.button !== 0) return;
         event.preventDefault();
         event.stopPropagation();
-        const option = modifyOptionKey(label);
-        if (option) props.onActivate(option);
-      }}><text fg={props.focus === index ? colors().selectedListItemText : colors().text}>{focusMarker(index, props.focus)} {label}</text></box>)}
-      <text fg={colors().textMuted}>Enter selecciona · Esc vuelve a Info</text>
+        props.onActivate(row.option);
+      }}>{row.label}</SelectableRow>)}
+      </SectionPanel>
+      <KeyHintBar theme={props.theme} hints="Enter selecciona · Esc vuelve a Info" />
     </box>
   );
 }
