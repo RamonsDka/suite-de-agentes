@@ -32,6 +32,7 @@ function controller(): AgentSuiteController & { calls: string[]; submitted?: Cre
     setEffort: async () => { calls.push("effort"); },
     setSkills: async () => { calls.push("skills"); },
     setOperations: async () => { calls.push("operations"); },
+    patchAgent: async () => undefined,
   };
 }
 
