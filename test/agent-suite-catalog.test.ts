@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { MAX_VISIBLE_ROWS, pageCount, pageRows } from "../src/tui/agent-suite-vm.ts";
-import { dispatchCatalogWheel, captureCatalogRow, catalogFocusBounds, catalogMouseActivation } from "../src/tui/screens/catalog.tsx";
+import { CATALOG_EMPTY_MESSAGE, catalogRowLabel, dispatchCatalogWheel, captureCatalogRow, catalogFocusBounds, catalogMouseActivation } from "../src/tui/screens/catalog.tsx";
 import { eventForKey } from "../src/tui/agent-suite-app.tsx";
 import type { KeyEvent } from "@opencode-ai/plugin/tui";
 
@@ -16,6 +16,24 @@ describe("Agent Suite catalog", () => {
     expect(dispatchCatalogWheel(0, "down", 2)).toBe(1);
     expect(dispatchCatalogWheel(2, "down", 2)).toBe(2);
     expect(dispatchCatalogWheel(0, "up", 2)).toBe(0);
+  });
+
+  it("formats catalog rows as names only while keeping blank and long names selectable", () => {
+    const detailed = {
+      ...rows[0],
+      id: "Nombre de agente extraordinariamente largo para la lista",
+      enabled: false,
+      membership: "custom" as const,
+      model: "openai/gpt-5",
+      variant: "high",
+    };
+
+    expect(catalogRowLabel({ ...detailed, id: "   " })).toBe("(sin nombre)");
+    expect(catalogRowLabel(detailed, 18)).toBe("Nombre de agente …");
+    expect(catalogRowLabel(detailed)).not.toContain("Creado");
+    expect(catalogRowLabel(detailed)).not.toContain("openai/gpt-5");
+    expect(catalogRowLabel(detailed)).not.toContain("high");
+    expect(CATALOG_EMPTY_MESSAGE).toBe("No hay agentes disponibles.");
   });
 
   it("captures row identity at render time and activates only left clicks", () => {

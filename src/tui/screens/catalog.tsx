@@ -2,7 +2,9 @@ import type { JSX } from "@opentui/solid";
 import type { TuiTheme } from "@opencode-ai/plugin/tui";
 import type { MouseEvent } from "@opentui/core";
 import type { AgentCatalogRow } from "../../core/types.ts";
-import { MAX_VISIBLE_ROWS, pageCount, pageRows, focusMarker, truncate } from "../agent-suite-vm.ts";
+import { MAX_VISIBLE_ROWS, pageCount, pageRows } from "../agent-suite-vm.ts";
+import { Divider, KeyHintBar, SelectableRow } from "../visual-primitives.tsx";
+import { formatCatalogName } from "../visual-tokens.ts";
 
 export interface CatalogProps {
   theme: TuiTheme;
@@ -12,6 +14,8 @@ export interface CatalogProps {
   onActivate: (identity: { agentId: string; index: number }) => void;
   onPage: (delta: -1 | 1) => void;
 }
+
+export const CATALOG_EMPTY_MESSAGE = "No hay agentes disponibles.";
 
 export function catalogFocusBounds(rows: readonly AgentCatalogRow[], page: number): { maxFocus: number; maxPage: number } {
   const maxPage = pageCount(rows.length) - 1;
@@ -35,8 +39,8 @@ export function catalogMouseActivation(event: MouseEvent, row: Pick<AgentCatalog
   return true;
 }
 
-function status(row: AgentCatalogRow): string {
-  return row.enabled ? "Disponible" : row.membership === "custom" ? "Creado · no materializado" : "No materializado";
+export function catalogRowLabel(row: Pick<AgentCatalogRow, "id">, maxLength?: number): string {
+  return formatCatalogName(row.id, maxLength);
 }
 
 export function Catalog(props: CatalogProps): JSX.Element {
@@ -54,12 +58,13 @@ export function Catalog(props: CatalogProps): JSX.Element {
   return (
     <box flexDirection="column" gap={1} onMouseScroll={handleWheel}>
       <text fg={colors().textMuted}>Página {props.page + 1}/{maxPage() + 1} · {MAX_VISIBLE_ROWS} filas por página</text>
-      {visibleRows().length === 0 ? <text fg={colors().textMuted}>No hay agentes disponibles.</text> : visibleRows().map((row, index) => (
-        <box backgroundColor={props.focus === index ? colors().backgroundMenu : colors().backgroundPanel} onMouseDown={(event) => catalogMouseActivation(event, row, index, activate)}>
-          <text fg={props.focus === index ? colors().selectedListItemText : colors().text}>{focusMarker(index, props.focus)} {row.id} · {status(row)} · {truncate(row.model ?? "modelo pendiente", 28)} · {row.variant ?? "predeterminado"}</text>
-        </box>
+      <Divider theme={props.theme} />
+      {visibleRows().length === 0 ? <text fg={colors().textMuted}>{CATALOG_EMPTY_MESSAGE}</text> : visibleRows().map((row, index) => (
+        <SelectableRow theme={props.theme} selected={props.focus === index} onMouseDown={(event) => catalogMouseActivation(event, row, index, activate)}>
+          {catalogRowLabel(row)}
+        </SelectableRow>
       ))}
-      <text fg={colors().textMuted}>Página ↑/↓ · rueda cambia página · Enter abre Info</text>
+      <KeyHintBar theme={props.theme} hints="Página ↑/↓ · rueda cambia página · Enter abre Info" />
     </box>
   );
 }

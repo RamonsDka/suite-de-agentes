@@ -1,6 +1,6 @@
 import type { JSX } from "@opentui/solid";
 import type { TuiTheme } from "@opencode-ai/plugin/tui";
-import { focusMarker } from "../agent-suite-vm.ts";
+import { SelectableRow } from "../visual-primitives.tsx";
 
 export interface LandingProps {
   theme: TuiTheme;
@@ -8,17 +8,27 @@ export interface LandingProps {
   onActivate: (index: 0 | 1) => void;
 }
 
+export interface LandingRow {
+  label: string;
+  selected: boolean;
+}
+
+export function landingRows(focus: 0 | 1): readonly LandingRow[] {
+  return [
+    { label: "CATALOGO", selected: focus === 0 },
+    { label: "CREAR AGENTE", selected: focus === 1 },
+  ];
+}
+
 export function Landing(props: LandingProps): JSX.Element {
-  const colors = () => props.theme.current;
-  const item = (index: 0 | 1, label: string) => (
-    <text fg={props.focus === index ? colors().selectedListItemText : colors().text}>
-      {focusMarker(index, props.focus)} {label}
-    </text>
+  const item = (row: LandingRow) => (
+    <SelectableRow theme={props.theme} selected={row.selected}>
+      {row.label}
+    </SelectableRow>
   );
   return (
     <box flexDirection="column" gap={1}>
-      {item(0, "CATALOGO")}
-      {item(1, "CREAR AGENTE")}
+      {landingRows(props.focus).map(item)}
     </box>
   );
 }
