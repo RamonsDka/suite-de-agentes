@@ -19,6 +19,32 @@ export function materializeGlobalAgent(agent: CustomAgent, confirm: () => boolea
   return target;
 }
 
+export function renameMaterializedAgent(oldId: string, newId: string, agent: CustomAgent, home?: string): string {
+  validateAgentId(oldId);
+  validateAgentId(newId);
+  if (oldId === newId) return globalAgentPath(newId, home);
+  const oldPath = globalAgentPath(oldId, home);
+  const newPath = globalAgentPath(newId, home);
+  if (existsSync(newPath)) throw new Error(`Materialized agent already exists: ${newId}`);
+  if (!existsSync(oldPath)) return newPath;
+
+  mkdirSync(dirname(newPath), { recursive: true });
+  const temporary = `${newPath}.tmp-${randomBytes(6).toString("hex")}`;
+  let promoted = false;
+  try {
+    writeFileSync(temporary, generateAgentMarkdown({ ...agent, id: newId }), { mode: 0o600 });
+    renameSync(temporary, newPath);
+    promoted = true;
+    unlinkSync(oldPath);
+    return newPath;
+  } catch (error) {
+    if (promoted && existsSync(newPath)) unlinkSync(newPath);
+    throw error;
+  } finally {
+    if (existsSync(temporary)) unlinkSync(temporary);
+  }
+}
+
 export function listRuntimeModels(state: unknown): string[] {
   if (!state || typeof state !== "object") return [];
   const providers = (state as Record<string, unknown>).provider;

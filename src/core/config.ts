@@ -1,9 +1,16 @@
-import type { SuiteConfig } from "./types.ts";
+import type { CustomAgent, SuiteConfig } from "./types.ts";
 import { SUITE_DE_AGENTES_SEED } from "./suites.ts";
 
 const ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const MODEL = /^[^/\s]+\/[^/\s]+$/;
 const VARIANT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+export interface AgentPatch {
+  newId?: string;
+  description?: string;
+  skills?: string[];
+  operations?: string;
+}
 
 export function validateAgentId(value: string): string {
   if (typeof value !== "string" || !ID.test(value) || value.length > 64) throw new Error("Invalid agent id: use lowercase kebab-case without path separators");
@@ -20,6 +27,44 @@ export function validateVariantId(value: string): string {
   const variant = typeof value === "string" ? value : "";
   if (!VARIANT.test(variant)) throw new Error("Invalid variant id: use a non-empty safe key without whitespace or path separators");
   return variant;
+}
+
+export function validateSkillId(value: string): string {
+  if (typeof value !== "string" || !ID.test(value) || value.length > 64) throw new Error("Invalid skill id: use lowercase kebab-case without path separators");
+  return value;
+}
+
+export function patchCustomAgent(config: SuiteConfig, id: string, patch: AgentPatch): SuiteConfig {
+  validateAgentId(id);
+  const current = config.customAgents[id];
+  if (!current) throw new Error(`Unknown custom agent: ${id}`);
+
+  const newId = patch.newId === undefined ? id : validateAgentId(patch.newId);
+  const seedIDs = new Set<string>(SUITE_DE_AGENTES_SEED);
+  if (newId !== id && (seedIDs.has(newId) || config.customAgents[newId])) throw new Error(`Agent ID collision: ${newId}`);
+
+  const skills = patch.skills === undefined ? [...current.skills] : patch.skills.map(validateSkillId);
+  const updated: CustomAgent = {
+    ...current,
+    id: newId,
+    description: patch.description === undefined ? current.description : patch.description,
+    prompt: patch.operations === undefined ? current.prompt : patch.operations,
+    skills,
+  };
+  const customAgents = { ...config.customAgents };
+  delete customAgents[id];
+  customAgents[newId] = updated;
+  const modelAssignments = { ...config.modelAssignments };
+  if (newId !== id && Object.prototype.hasOwnProperty.call(modelAssignments, id)) {
+    modelAssignments[newId] = modelAssignments[id];
+    delete modelAssignments[id];
+  }
+  const variantAssignments = { ...config.variantAssignments };
+  if (newId !== id && Object.prototype.hasOwnProperty.call(variantAssignments, id)) {
+    variantAssignments[newId] = variantAssignments[id];
+    delete variantAssignments[id];
+  }
+  return { version: 1, customAgents, modelAssignments, variantAssignments };
 }
 
 function record(value: unknown, label: string): Record<string, unknown> {
