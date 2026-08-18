@@ -36,12 +36,7 @@ export function ErrorPanel(props: ErrorPanelProps): JSX.Element {
         <FieldRow theme={props.theme} label="Detalle" value={props.message} />
       </SectionPanel>
       <Divider theme={props.theme} />
-      {errorPanelPresentation(props.focus).actions.map(({ label, selected }, index) => <SelectableRow theme={props.theme} selected={selected} onMouseDown={(event) => {
-        if (event.button !== 0) return;
-        event.preventDefault();
-        event.stopPropagation();
-        if (index === 0) props.onRetry(); else props.onClose();
-      }}>{label}</SelectableRow>)}
+      {errorPanelPresentation(props.focus).actions.map(({ label, selected }, index) => <SelectableRow theme={props.theme} selected={selected} onActivate={() => { if (index === 0) props.onRetry(); else props.onClose(); }}>{label}</SelectableRow>)}
     </box>
   );
 }
