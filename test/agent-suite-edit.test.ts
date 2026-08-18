@@ -226,7 +226,7 @@ describe("Agent Suite inline editing", () => {
       { kind: "effort", agentId: custom.id, focus: 0 }, { kind: "delete", agentId: custom.id, confirmFocus: 0 },
       { kind: "create", step: 0, draft: { id: "", description: "", skills: [], operations: "", model: "", effort: "" }, focus: 0 },
     ];
-    for (const screen of screens) expect(suiteScreenKeybar(screen)).toBe(screenKeyHints(screen.kind));
+    for (const screen of screens) expect(suiteScreenKeybar(screen)).toBe(screen.kind === "modify" ? "F10 Finalizar · ↑↓ navega · Enter selecciona · Esc volver" : screenKeyHints(screen.kind));
     expect(suiteScreenKeybar(screens[0]!, true)).toBe(screenKeyHints("error"));
     expect(screenKeyHintsForScreen({ kind: "modify", agentId: custom.id, focus: 0, edit: { mode: "skills", skills: [], focus: 0, adding: false, input: "" } })).toBe("Enter guardar · Esc cancelar");
     expect(screenKeyHintsForScreen({ kind: "modify", agentId: custom.id, focus: 0, edit: { mode: "text", field: "operations", value: "" } })).toBe("Enter guardar · Esc cancelar");
