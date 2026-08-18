@@ -18,7 +18,7 @@ const seed = { id: "general", membership: "seed" as const, enabled: true, skills
 const custom = { ...seed, id: "custom", membership: "custom" as const };
 
 describe("Agent Suite navigation", () => {
-  it("keeps two landing choices and exposes their selected presentation state", () => {
+  it("exposes only catalog and create landing choices with selected presentation state", () => {
     expect(landingRows(0)).toEqual([
       { label: "CATALOGO", selected: true },
       { label: "CREAR AGENTE", selected: false },
@@ -46,8 +46,23 @@ describe("Agent Suite navigation", () => {
     const focused = reduceNav(reduceNav(paged, { type: "MOVE_FOCUS", delta: 1, maxFocus: 5 }), { type: "MOVE_FOCUS", delta: 1, maxFocus: 5 });
     const info = reduceNav(focused, { type: "ACTIVATE_AGENT", agentId: "general" });
     const restored = reduceNav(info, { type: "BACK" });
-    expect(restored.stack.at(-1)).toEqual({ kind: "catalog", page: 1, focus: 2 });
-    expect(catalog.stack.at(-1)).toEqual({ kind: "catalog", page: 0, focus: 0 });
+    expect(restored.stack.at(-1)).toMatchObject({ kind: "catalog", page: 1, focus: 2, searchFocused: false });
+    expect(catalog.stack.at(-1)).toMatchObject({ kind: "catalog", page: 0, focus: 0, searchFocused: false });
+  });
+
+  it("opens the unified catalog on results and enters search explicitly", () => {
+    const catalog = reduceNav(initialNavState(), { type: "ACTIVATE_LANDING_ITEM", index: 0 });
+    expect(catalog.stack.at(-1)).toMatchObject({ kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false });
+
+    const searching = reduceNav(catalog, { type: "FOCUS_CATALOG_SEARCH" });
+    expect(searching.stack.at(-1)).toMatchObject({ kind: "catalog", searchFocused: true });
+
+    const filtered = reduceNav(searching, { type: "CATALOG_QUERY", value: "Son" });
+    expect(filtered.stack.at(-1)).toMatchObject({ kind: "catalog", page: 0, focus: 0, query: "Son", searchFocused: true });
+
+    const results = reduceNav(filtered, { type: "FOCUS_CATALOG_RESULTS" });
+    expect(results.stack.at(-1)).toMatchObject({ kind: "catalog", query: "Son", searchFocused: false });
+    expect(reduceNav(results, { type: "FOCUS_CATALOG_SEARCH" }).stack.at(-1)).toMatchObject({ kind: "catalog", searchFocused: true });
   });
 
   it("uses one modify destination and returns model selection to its menu", () => {
@@ -55,9 +70,9 @@ describe("Agent Suite navigation", () => {
     const modify = reduceNav(info, { type: "OPEN_MODIFY", agentId: "general" });
     const model = reduceNav(modify, { type: "MODIFY_ACTIVATE", option: "model" });
     const returned = reduceNav(model, { type: "SELECT_MODEL", model: "openai/new" });
-    expect(modify.stack.at(-1)).toEqual({ kind: "modify", agentId: "general", focus: 0, edit: { mode: "menu" } });
+    expect(modify.stack.at(-1)).toMatchObject({ kind: "modify", agentId: "general", focus: 0, edit: { mode: "menu" }, protectedBase: true });
     expect(model.stack.at(-1)).toMatchObject({ kind: "model", agentId: "general" });
-    expect(returned.stack.at(-1)).toMatchObject({ kind: "modify", agentId: "general", edit: { mode: "menu" } });
+    expect(returned.stack.at(-1)).toMatchObject({ kind: "effort", agentId: "general", focus: 0 });
   });
 
   it("keeps create draft values while moving between steps and closes only from landing", () => {
@@ -80,12 +95,14 @@ describe("Agent Suite navigation", () => {
     expect(pageRows(Array.from({ length: 8 }, (_, index) => index), 1)).toEqual([6, 7]);
     expect(MAX_VISIBLE_ROWS).toBe(6);
     expect(modifyOptions(seed)).toEqual(["Modelo de IA", "Nivel de esfuerzo", "Volver"]);
-    expect(modifyOptions(custom)).toEqual(["Modelo de IA", "Nivel de esfuerzo", "Skills", "Operaciones", "Volver"]);
+    expect(modifyOptions({ ...seed, fullBaseEditing: true })).toEqual(["Descripción", "Skills", "Operaciones", "Modelo de IA", "Nivel de esfuerzo", "Volver"]);
+    expect(modifyOptions(custom)).toEqual(["Modificar nombre", "Descripción", "Skills", "Operaciones", "Modelo de IA", "Nivel de esfuerzo", "Eliminar", "Volver"]);
   });
 
   it("defines deterministic membership-scoped editor fields", () => {
     expect(editorFields(custom)).toEqual(["id", "description", "skills", "operations", "model", "effort", "delete"]);
     expect(editorFields(seed)).toEqual(["model", "effort"]);
+    expect(editorFields({ ...seed, fullBaseEditing: true })).toEqual(["description", "skills", "operations", "model", "effort"]);
   });
 
   it("bounds editor-menu focus to the final permitted field", () => {
@@ -97,7 +114,7 @@ describe("Agent Suite navigation", () => {
     }
 
     expect(customMenu.stack.at(-1)).toMatchObject({ kind: "modify", focus: 6 });
-    expect(seedMenu.stack.at(-1)).toMatchObject({ kind: "modify", focus: 1 });
+    expect(seedMenu.stack.at(-1)).toMatchObject({ kind: "modify", focus: 4 });
   });
 
   it("stages text and skills drafts without leaking mutable source values", () => {

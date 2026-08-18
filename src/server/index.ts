@@ -5,6 +5,7 @@ import { defaultSuitePath, loadSuiteConfig } from "../core/persistence.ts";
 import type { Config as PluginConfig, Plugin, PluginInput, PluginModule } from "@opencode-ai/plugin";
 import type { Part } from "@opencode-ai/sdk";
 import { randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
 
 type RuntimePermission = NonNullable<PluginConfig["permission"]> & {
   task?: Record<string, "allow" | "deny" | "ask">;
@@ -70,6 +71,7 @@ export interface AgentSuiteServerOptions {
   sessionAgent?: (sessionID: string) => string | undefined | Promise<string | undefined>;
   ledger?: ConsentLedger;
   disabledAgents?: () => readonly string[];
+  securityState?: () => { disabledAgents: readonly string[]; available: boolean };
 }
 
 interface ChatMessageInput { sessionID: string; agent?: string; messageID?: string; }
@@ -81,6 +83,7 @@ export function createAgentSuiteServer(options: AgentSuiteServerOptions = {}) {
   const ledger = options.ledger ?? new ConsentLedger();
   const knownAgents = options.knownAgents ?? (() => []);
   const currentTurns = new Map<string, { messageID: string; agent?: string }>();
+  const readSecurityState = () => options.securityState?.() ?? { disabledAgents: options.disabledAgents?.() ?? [], available: true };
   return {
     "chat.message": async (input: ChatMessageInput, output: ChatMessageOutput) => {
       const messageID = input.messageID ?? output.message?.id;
@@ -89,8 +92,9 @@ export function createAgentSuiteServer(options: AgentSuiteServerOptions = {}) {
         return;
       }
       currentTurns.set(input.sessionID, { messageID, agent: input.agent ?? output.message?.agent });
-      const disabled = new Set(options.disabledAgents?.() ?? []);
-      const known = knownAgents().filter((agent) => !disabled.has(agent));
+      const state = readSecurityState();
+      const disabled = new Set(state.disabledAgents);
+      const known = state.available ? knownAgents().filter((agent) => !disabled.has(agent)) : [];
       registerMessageGrant(ledger, { sessionID: input.sessionID, messageID, parts: output.parts }, known);
       const sessionAgent = input.agent ?? output.message?.agent;
       if (sessionAgent === SDD_ORCHESTRATOR) {
@@ -111,14 +115,17 @@ export function createAgentSuiteServer(options: AgentSuiteServerOptions = {}) {
     },
     "tool.execute.before": async (input: ToolBeforeInput, output: ToolBeforeOutput) => {
       if (input.tool !== "task") return;
+      const state = readSecurityState();
+      if (!state.available) throw new Error("Suite de Agentes: suite config unavailable");
+      const disabledAgents = state.disabledAgents;
       const turn = currentTurns.get(input.sessionID);
       if (!turn) throw new Error("Suite de Agentes: cannot resolve the current turn for this task");
       const sessionAgent = turn.agent ?? await options.sessionAgent?.(input.sessionID);
       if (!sessionAgent) throw new Error("Suite de Agentes: cannot resolve the session agent for the current turn");
       const target = typeof output.args.subagent_type === "string" ? output.args.subagent_type : "";
       if (!target && sessionAgent === SDD_ORCHESTRATOR) throw new Error("Suite de Agentes: task target subagent_type is missing");
-      const decision = decideTaskGate({ sessionAgent, target, sessionID: input.sessionID, messageID: turn.messageID, ledger, disabledAgents: options.disabledAgents?.() });
-      if (!decision.allowed && sessionAgent === SDD_ORCHESTRATOR) throw new Error(`Suite de Agentes: ${decision.reason}`);
+      const decision = decideTaskGate({ sessionAgent, target, sessionID: input.sessionID, messageID: turn.messageID, ledger, disabledAgents });
+      if (!decision.allowed && (sessionAgent === SDD_ORCHESTRATOR || disabledAgents.includes(target))) throw new Error(`Suite de Agentes: ${decision.reason}`);
     },
     "tool.execute.after": async () => undefined,
   };
@@ -139,24 +146,46 @@ async function resolveSessionAgent(input: PluginInput, sessionID: string): Promi
 export const serverPlugin: Plugin = async (input) => {
   const registeredAgents = new Set<string>();
   let disabledAgents: string[] = [];
+  let suiteConfigLoaded = false;
+  const liveDisabledAgents = () => {
+    try {
+      const path = defaultSuitePath();
+      if (suiteConfigLoaded && !existsSync(path)) throw new Error("Suite config is unavailable");
+      disabledAgents = [...(loadSuiteConfig(path).disabledAgents ?? [])];
+      suiteConfigLoaded = true;
+      return disabledAgents;
+    } catch {
+      throw new Error("Suite de Agentes: suite config unavailable");
+    }
+  };
+  const securityState = () => {
+    try {
+      return { disabledAgents: liveDisabledAgents(), available: true };
+    } catch {
+      return { disabledAgents, available: false };
+    }
+  };
   const hooks = createAgentSuiteServer({
     knownAgents: () => [...registeredAgents],
     sessionAgent: (sessionID) => resolveSessionAgent(input, sessionID),
-    disabledAgents: () => disabledAgents,
+    disabledAgents: liveDisabledAgents,
+    securityState,
   });
   return {
     ...hooks,
     config: async (config: PluginConfig) => {
+      const configuredAgents = Object.keys(config.agent ?? {});
       try {
         const suite = loadSuiteConfig(defaultSuitePath());
         disabledAgents = [...(suite.disabledAgents ?? [])];
+        suiteConfigLoaded = true;
         applyRuntimeDisabledAgents(config, disabledAgents);
         applyRuntimeBaseOverrides(config, suite.baseOverrides ?? {});
         applyRuntimeTaskPermission(config, disabledAgents);
         applyRuntimeModelAssignments(config, suite.modelAssignments, suite.variantAssignments);
-      } catch { disabledAgents = []; applyRuntimeTaskPermission(config); /* TUI reports malformed suite config. */ }
+      } catch { applyRuntimeTaskPermission(config, disabledAgents); /* TUI reports malformed suite config. */ }
       registeredAgents.clear();
-      for (const agentID of Object.keys(config.agent ?? {})) registeredAgents.add(agentID);
+      for (const agentID of configuredAgents) registeredAgents.add(agentID);
     },
   };
 };

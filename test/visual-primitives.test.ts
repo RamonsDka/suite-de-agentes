@@ -1,7 +1,7 @@
 import { RGBA } from "@opentui/core";
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui";
 import { describe, expect, it } from "vitest";
-import { agentInfoSections, screenKeyHints, selectableRowPresentation } from "../src/tui/visual-primitives.tsx";
+import { agentInfoSections, currentValueCue, screenKeyHints, selectableRowPresentation, selectionErrorPresentation } from "../src/tui/visual-primitives.tsx";
 
 const row = {
   id: "custom-agent", membership: "custom" as const, enabled: true, model: "openai/gpt-5",
@@ -21,6 +21,16 @@ describe("visual primitives", () => {
     expect(selectableRowPresentation({ current } as never, true)).toMatchObject({
       marker: "► ", background: current.accent, foreground: current.selectedListItemText, border: current.borderActive,
     });
+  });
+
+  it("provides a textual current-model cue and optional selection error presentation", () => {
+    expect(currentValueCue("openai/gpt-5")).toBe("openai/gpt-5 · Modelo actual");
+    expect(selectionErrorPresentation("write failed")).toEqual({ status: "error", message: "write failed" });
+    expect(selectionErrorPresentation()).toBeUndefined();
+  });
+
+  it("uses a semantic status color without changing selected-row markers", () => {
+    expect(selectableRowPresentation({ current } as never, true, "info")).toMatchObject({ marker: "► ", foreground: current.info, border: current.info });
   });
 
   it("returns screen-specific key hints", () => {
