@@ -29,6 +29,7 @@ export function screenTitle(screen: Pick<AppScreen, "kind"> & { disabled?: boole
     case "effort": return "SELECCIONAR NIVEL DE ESFUERZO";
     case "delete": return "ADVERTENCIA";
     case "create": return `CREAR AGENTE — v${PLUGIN_VERSION}`;
+    case "coordinator": return "CONFIGURACIÓN DEL COORDINADOR";
   }
 }
 

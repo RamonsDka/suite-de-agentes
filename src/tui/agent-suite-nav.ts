@@ -16,15 +16,18 @@ export type CreateDraft = {
   effort: string;
 };
 
+export type CoordinatorStage = "settings" | "provider" | "model" | "effort";
+
 export type AppScreen =
-  | { kind: "landing"; focus: 0 | 1 }
+  | { kind: "landing"; focus: 0 | 1 | 2 }
   | { kind: "catalog"; page: number; focus: number; query: string; searchFocused: boolean }
   | { kind: "info"; agentId: string; focus: number }
   | { kind: "model"; agentId: string; focus: number }
   | { kind: "effort"; agentId: string; focus: number }
   | { kind: "modify"; agentId: string; focus: number; edit: ModifyEdit; editable?: boolean; protectedBase?: boolean }
   | { kind: "delete"; agentId: string; confirmFocus: 0 | 1 }
-  | { kind: "create"; step: 0 | 1 | 2 | 3 | 4 | 5; draft: CreateDraft; focus: number };
+  | { kind: "create"; step: 0 | 1 | 2 | 3 | 4 | 5; draft: CreateDraft; focus: number }
+  | { kind: "coordinator"; stage: CoordinatorStage; focus: number; provider?: string; model?: string };
 
 export type NavState = {
   stack: AppScreen[];
@@ -35,6 +38,10 @@ export type NavState = {
 
 export type NavEvent =
   | { type: "ACTIVATE_LANDING_ITEM"; index: number }
+  | { type: "OPEN_COORDINATOR_SETUP" }
+  | { type: "SELECT_COORDINATOR_PROVIDER"; provider: string }
+  | { type: "SELECT_COORDINATOR_MODEL"; model: string }
+  | { type: "SELECT_COORDINATOR_EFFORT"; effort: string }
   | { type: "ACTIVATE_AGENT"; agentId: string }
   | { type: "CATALOG_QUERY"; value: string }
   | { type: "FOCUS_CATALOG_RESULTS"; query?: string }
@@ -119,7 +126,16 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
       if (screen.kind !== "landing") return state;
       return event.index === 0
         ? push(state, { kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false })
-        : event.index === 1 ? push(state, { kind: "create", step: 0, draft: { ...EMPTY_DRAFT, skills: [] }, focus: 0 }) : state;
+        : event.index === 1 ? push(state, { kind: "create", step: 0, draft: { ...EMPTY_DRAFT, skills: [] }, focus: 0 })
+          : event.index === 2 ? push(state, { kind: "coordinator", stage: "settings", focus: 0 }) : state;
+    case "OPEN_COORDINATOR_SETUP":
+      return screen.kind === "coordinator" && screen.stage === "settings" ? replaceTop(state, { kind: "coordinator", stage: "provider", focus: 0 }) : state;
+    case "SELECT_COORDINATOR_PROVIDER":
+      return screen.kind === "coordinator" && screen.stage === "provider" ? replaceTop(state, { kind: "coordinator", stage: "model", focus: 0, provider: event.provider }) : state;
+    case "SELECT_COORDINATOR_MODEL":
+      return screen.kind === "coordinator" && screen.stage === "model" && screen.provider ? replaceTop(state, { kind: "coordinator", stage: "effort", focus: 0, provider: screen.provider, model: event.model }) : state;
+    case "SELECT_COORDINATOR_EFFORT":
+      return screen.kind === "coordinator" && screen.stage === "effort" ? replaceTop(state, { kind: "coordinator", stage: "settings", focus: 0 }) : state;
     case "ACTIVATE_AGENT":
       return screen.kind === "catalog" ? push(state, { kind: "info", agentId: event.agentId, focus: 0 }) : state;
     case "CATALOG_QUERY":
@@ -129,13 +145,14 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
     case "FOCUS_CATALOG_SEARCH":
       return screen.kind === "catalog" ? replaceTop(state, { ...screen, searchFocused: true }) : state;
     case "MOVE_FOCUS": {
-      const max = event.maxFocus ?? (screen.kind === "landing" ? 1 : screen.kind === "modify" && screen.edit.mode === "menu" ? modifyMaxFocus(screen) : screen.kind === "modify" && screen.edit.mode === "skills" ? screen.edit.skills.length : screen.kind === "delete" ? 1 : 0);
-      if (screen.kind === "landing") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) as 0 | 1 });
+      const max = event.maxFocus ?? (screen.kind === "landing" ? 2 : screen.kind === "coordinator" ? 0 : screen.kind === "modify" && screen.edit.mode === "menu" ? modifyMaxFocus(screen) : screen.kind === "modify" && screen.edit.mode === "skills" ? screen.edit.skills.length : screen.kind === "delete" ? 1 : 0);
+      if (screen.kind === "landing") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) as 0 | 1 | 2 });
       if (screen.kind === "catalog") return replaceTop(state, { ...screen, searchFocused: false, focus: clamp(screen.focus + event.delta, max) });
       if (screen.kind === "info" || screen.kind === "model" || screen.kind === "effort" || screen.kind === "create") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) });
       if (screen.kind === "modify" && screen.edit.mode === "menu") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) });
       if (screen.kind === "modify" && screen.edit.mode === "skills") return replaceTop(state, { ...screen, edit: { ...screen.edit, focus: clamp(screen.edit.focus + event.delta, max) } });
       if (screen.kind === "delete") return replaceTop(state, { ...screen, confirmFocus: clamp(screen.confirmFocus + event.delta, 1) as 0 | 1 });
+      if (screen.kind === "coordinator") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) });
       return state;
     }
     case "PAGE":

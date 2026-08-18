@@ -13,19 +13,23 @@ import {
   screenTitle,
 } from "../src/tui/agent-suite-vm.ts";
 import { landingMouseActivation, landingRows } from "../src/tui/screens/landing.tsx";
+import { coordinatorEffortOptions, coordinatorModelOptions, coordinatorProviderOptions, coordinatorSelectionOptions, coordinatorStatus } from "../src/tui/screens/coordinator-config.tsx";
+import { applyCoordinatorSelection, eventForKey, handleCoordinatorSelectionKey } from "../src/tui/agent-suite-app.tsx";
 
 const seed = { id: "general", membership: "seed" as const, enabled: true, skills: [], consent: "explicit-current-turn" as const };
 const custom = { ...seed, id: "custom", membership: "custom" as const };
 
 describe("Agent Suite navigation", () => {
-  it("exposes only catalog and create landing choices with selected presentation state", () => {
+  it("renders the three exact landing options and labels the configuration gear status", () => {
     expect(landingRows(0)).toEqual([
-      { label: "CATALOGO", selected: true },
-      { label: "CREAR AGENTE", selected: false },
+      { label: "Catálogo", selected: true },
+      { label: "Crear agente", selected: false },
+      { label: "⚙ Configuración", selected: false, status: "No configurado" },
     ]);
-    expect(landingRows(1)).toEqual([
-      { label: "CATALOGO", selected: false },
-      { label: "CREAR AGENTE", selected: true },
+    expect(landingRows(2, { provider: "openai", model: "gpt-5", effort: "high" })).toEqual([
+      { label: "Catálogo", selected: false },
+      { label: "Crear agente", selected: false },
+      { label: "⚙ Configuración", selected: true, status: "Configurado" },
     ]);
   });
 
@@ -38,6 +42,49 @@ describe("Agent Suite navigation", () => {
     expect(landingMouseActivation(right, 0, activate)).toBe(false);
     expect(activate).toHaveBeenCalledWith(1);
     expect(right.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("routes configuration through provider, model, and dynamic effort selection, then returns to its root", () => {
+    const settings = reduceNav(initialNavState(), { type: "ACTIVATE_LANDING_ITEM", index: 2 });
+    const provider = reduceNav(settings, { type: "OPEN_COORDINATOR_SETUP" });
+    const model = reduceNav(provider, { type: "SELECT_COORDINATOR_PROVIDER", provider: "openai" });
+    const effort = reduceNav(model, { type: "SELECT_COORDINATOR_MODEL", model: "gpt-5" });
+    const root = reduceNav(effort, { type: "SELECT_COORDINATOR_EFFORT", effort: "high" });
+
+    expect(settings.stack.at(-1)).toMatchObject({ kind: "coordinator", stage: "settings", focus: 0 });
+    expect(provider.stack.at(-1)).toMatchObject({ kind: "coordinator", stage: "provider" });
+    expect(model.stack.at(-1)).toMatchObject({ kind: "coordinator", stage: "model", provider: "openai" });
+    expect(effort.stack.at(-1)).toMatchObject({ kind: "coordinator", stage: "effort", provider: "openai", model: "gpt-5" });
+    expect(root.stack.at(-1)).toEqual({ kind: "coordinator", stage: "settings", focus: 0 });
+  });
+
+  it("derives provider, model, and effort choices from runtime data without closing the effort vocabulary", () => {
+    const runtime = [{ id: "openai", name: "OpenAI", models: { "gpt-5": { id: "gpt-5", name: "GPT-5", variants: { high: {}, "extra-high": {} } } } }];
+
+    expect(coordinatorProviderOptions(runtime).map(({ value }) => value)).toEqual(["openai"]);
+    expect(coordinatorModelOptions(runtime, "openai")).toEqual([{ title: "GPT-5", value: "gpt-5" }]);
+    expect(coordinatorEffortOptions(runtime, "openai", "gpt-5")).toEqual([
+      { title: "Predeterminado", value: "" }, { title: "high", value: "high" }, { title: "extra-high", value: "extra-high" },
+    ]);
+    expect(coordinatorSelectionOptions("effort", runtime, "openai", "gpt-5").map(({ value }) => value)).toEqual(["", "high", "extra-high"]);
+  });
+
+  it("persists coordinator selection through the controller and keyboard completion", async () => {
+    const setCoordinator = vi.fn(async () => undefined);
+    const refresh = vi.fn();
+    const dispatch = vi.fn();
+    const controller = { setCoordinator, refresh } as unknown as import("../src/tui/agent-suite-controller.ts").AgentSuiteController;
+
+    await applyCoordinatorSelection(controller, "openai", "gpt-5", "", dispatch);
+    expect(setCoordinator).toHaveBeenCalledWith({ provider: "openai", model: "gpt-5" });
+    expect(dispatch).toHaveBeenCalledWith({ type: "SELECT_COORDINATOR_EFFORT", effort: "" });
+
+    const key = { name: "return", preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as import("@opencode-ai/plugin/tui").KeyEvent;
+    const state: NavState = { stack: [{ kind: "landing", focus: 0 }, { kind: "coordinator", stage: "effort", focus: 0, provider: "openai", model: "gpt-5" }], busy: false, closing: false };
+    await expect(handleCoordinatorSelectionKey(key, { type: "SELECT_COORDINATOR_EFFORT", effort: "high" }, state, controller, dispatch, vi.fn())).resolves.toBe(true);
+    expect(setCoordinator).toHaveBeenLastCalledWith({ provider: "openai", model: "gpt-5", effort: "high" });
+    expect(eventForKey(key, state, 0, undefined, { coordinatorOptions: ["high"] })).toEqual({ type: "SELECT_COORDINATOR_EFFORT", effort: "high" });
+    expect(coordinatorStatus()).toEqual({ label: "No configurado", status: "error" });
   });
 
   it("pushes landing destinations and preserves catalog context on Back", () => {
@@ -87,10 +134,10 @@ describe("Agent Suite navigation", () => {
   });
 
   it("maps every WU1 screen title and bounds catalog rows", () => {
-    const kinds: AppScreen["kind"][] = ["landing", "catalog", "info", "modify", "model", "effort", "delete", "create"];
+    const kinds: AppScreen["kind"][] = ["landing", "catalog", "info", "modify", "model", "effort", "delete", "create", "coordinator"];
     expect(kinds.map((kind) => screenTitle({ kind } as AppScreen))).toEqual([
       "SUITE DE AGENTES — v1.0.1", "CATALOGO DE AGENTES", "INFO DEL AGENTE", "MODIFICAR AGENTE",
-      "SELECCIONAR EL MODELO DE IA", "SELECCIONAR NIVEL DE ESFUERZO", "ADVERTENCIA", "CREAR AGENTE — v1.0.1",
+      "SELECCIONAR EL MODELO DE IA", "SELECCIONAR NIVEL DE ESFUERZO", "ADVERTENCIA", "CREAR AGENTE — v1.0.1", "CONFIGURACIÓN DEL COORDINADOR",
     ]);
     expect(pageRows(Array.from({ length: 8 }, (_, index) => index), 1)).toEqual([6, 7]);
     expect(MAX_VISIBLE_ROWS).toBe(6);

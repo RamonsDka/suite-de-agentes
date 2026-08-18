@@ -26,7 +26,7 @@ describe("TUI host compatibility", () => {
     expect(suiteSidebarLabel()).toBe(`Suite de Agentes · Alt+S · v${PLUGIN_VERSION}`);
   });
 
-  it("exposes exactly the two Spanish root options", () => {
-    expect(buildSuiteRootOptions().map((option) => option.title)).toEqual(["Catálogo", "Crear agente"]);
+  it("exposes exactly the three Spanish root options including configuration", () => {
+    expect(buildSuiteRootOptions().map((option) => option.title)).toEqual(["Catálogo", "Crear agente", "⚙ Configuración"]);
   });
 });

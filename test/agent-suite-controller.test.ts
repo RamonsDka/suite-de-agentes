@@ -25,7 +25,7 @@ describe("Agent Suite controller adapter", () => {
 
   it("supports explicit operation method names for every mutation", () => {
     const controller = createAgentSuiteController();
-    expect(Object.keys(controller)).toEqual(["snapshot", "refresh", "createAgent", "deleteAgent", "deactivateAgent", "reactivateAgent", "materialize", "setModel", "setEffort", "setSkills", "setOperations", "patchAgent", "operations"]);
+    expect(Object.keys(controller)).toEqual(["snapshot", "refresh", "createAgent", "deleteAgent", "deactivateAgent", "reactivateAgent", "materialize", "setModel", "setEffort", "setSkills", "setOperations", "patchAgent", "operations", "coordinator", "setCoordinator"]);
   });
 
   it("builds the initial snapshot from persisted and runtime agents", () => {
@@ -46,6 +46,16 @@ describe("Agent Suite controller adapter", () => {
 
     const reloaded = createAgentSuiteController([], "1.0.1", { path, runtime: {} });
     expect(reloaded.snapshot().rows).toEqual(expect.arrayContaining([expect.objectContaining({ id: draft.id, model: draft.model, variant: draft.effort })]));
+  });
+
+  it("persists the coordinator through the controller rather than duplicating config writes in the TUI", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
+    const controller = createAgentSuiteController([], "1.0.1", { path, runtime: {} });
+
+    expect(controller.coordinator?.()).toBeUndefined();
+    await controller.setCoordinator?.({ provider: "openai", model: "gpt-5", effort: "extra-high" });
+    expect(controller.coordinator?.()).toEqual({ provider: "openai", model: "gpt-5", effort: "extra-high" });
+    expect(loadSuiteConfig(path).coordinator).toEqual({ provider: "openai", model: "gpt-5", effort: "extra-high" });
   });
 
   it("commits a custom patch, persists it, migrates its materialized file, and rebuilds", async () => {

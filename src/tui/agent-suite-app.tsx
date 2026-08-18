@@ -15,6 +15,7 @@ import { AgentInfo } from "./screens/agent-info.tsx";
 import { ModifyPanel } from "./screens/modify-panel.tsx";
 import { ModelSelect } from "./screens/model-select.tsx";
 import { EffortSelect } from "./screens/effort-select.tsx";
+import { CoordinatorConfig, coordinatorSelectionOptions, type RuntimeCoordinatorProvider } from "./screens/coordinator-config.tsx";
 import { DeleteWarning } from "./screens/delete-warning.tsx";
 import { ErrorPanel } from "./screens/error-panel.tsx";
 import { CreateAgent, validateCreateDraft, validateCreateStep } from "./screens/create-agent.tsx";
@@ -30,6 +31,7 @@ export interface AgentSuiteAppProps {
   registerEscapeHandler?: (handler: () => boolean) => () => void;
   modelOptions?: (row: import("../core/types.ts").AgentCatalogRow) => readonly TuiDialogSelectOption<string>[];
   variantOptions?: (row: import("../core/types.ts").AgentCatalogRow, model: string) => readonly TuiDialogSelectOption<string>[];
+  coordinatorProviders?: readonly RuntimeCoordinatorProvider[];
 }
 
 export async function applyBaseDeactivation(controller: AgentSuiteController, agentId: string, dispatch: (event: NavEvent) => void): Promise<string | undefined> {
@@ -87,7 +89,7 @@ function legacyModifyOptionAtFocus(isCustom: boolean | undefined, focus: number)
   return (options[focus] as EditorField | "back" | undefined) ?? "back";
 }
 
-function eventForKey(key: KeyEvent, state: NavState, catalogRowCount = 0, focusedCatalogAgentId?: string, options: { infoActionCount?: number; modifyOptionCount?: number; focusedModel?: string; focusedEffort?: string; models?: readonly string[]; efforts?: readonly string[]; canDelete?: boolean; isCustom?: boolean; isEnabled?: boolean; isDisabled?: boolean } = {}): NavEvent | undefined {
+function eventForKey(key: KeyEvent, state: NavState, catalogRowCount = 0, focusedCatalogAgentId?: string, options: { infoActionCount?: number; modifyOptionCount?: number; focusedModel?: string; focusedEffort?: string; models?: readonly string[]; efforts?: readonly string[]; coordinatorOptions?: readonly string[]; canDelete?: boolean; isCustom?: boolean; isEnabled?: boolean; isDisabled?: boolean } = {}): NavEvent | undefined {
   const screen = state.stack.at(-1);
   if (!screen || state.closing) return undefined;
   if (key.name === "escape") {
@@ -108,7 +110,7 @@ function eventForKey(key: KeyEvent, state: NavState, catalogRowCount = 0, focuse
   if (key.name === "f3") return { type: "ACTIVATE_LANDING_ITEM", index: 1 };
   if (key.name === "f5" && screen.kind === "info") return options.isDisabled === true ? undefined : { type: "OPEN_MODIFY", agentId: screen.agentId, custom: options.isCustom };
   if (key.name === "f8" && screen.kind === "info") return options.isCustom === true ? { type: "REQUEST_DELETE", agentId: screen.agentId } : undefined;
-  const maxFocus = screen.kind === "landing" ? 1 : screen.kind === "catalog" ? Math.max(0, Math.min(5, catalogRowCount - screen.page * 6 - 1)) : screen.kind === "info" ? Math.max(0, (options.infoActionCount ?? 1) - 1) : screen.kind === "modify" ? screen.edit.mode === "skills" ? screen.edit.skills.length : Math.max(0, (options.modifyOptionCount ?? 1) - 1) : screen.kind === "model" ? Math.max(0, (options.models?.length ?? 0) - 1) : screen.kind === "effort" ? Math.max(0, (options.efforts?.length ?? 1) - 1) : screen.kind === "delete" ? 1 : undefined;
+  const maxFocus = screen.kind === "landing" ? 2 : screen.kind === "catalog" ? Math.max(0, Math.min(5, catalogRowCount - screen.page * 6 - 1)) : screen.kind === "info" ? Math.max(0, (options.infoActionCount ?? 1) - 1) : screen.kind === "modify" ? screen.edit.mode === "skills" ? screen.edit.skills.length : Math.max(0, (options.modifyOptionCount ?? 1) - 1) : screen.kind === "model" ? Math.max(0, (options.models?.length ?? 0) - 1) : screen.kind === "effort" ? Math.max(0, (options.efforts?.length ?? 1) - 1) : screen.kind === "coordinator" ? Math.max(0, (options.coordinatorOptions?.length ?? 1) - 1) : screen.kind === "delete" ? 1 : undefined;
   if (key.name === "up" || key.name === "left") return { type: "MOVE_FOCUS", delta: -1, maxFocus };
   if (key.name === "down" || key.name === "right") return { type: "MOVE_FOCUS", delta: 1, maxFocus };
   if (key.name === "pageup") return screen.kind === "catalog" ? { type: "PAGE", delta: -1, maxPage: Math.max(0, Math.ceil(catalogRowCount / 6) - 1) } : undefined;
@@ -132,6 +134,14 @@ function eventForKey(key: KeyEvent, state: NavState, catalogRowCount = 0, focuse
     if (screen.kind === "modify" && screen.edit.mode === "operations") return { type: "EDIT_COMMIT" };
     if (screen.kind === "model" && options.focusedModel) return { type: "SELECT_MODEL", model: options.focusedModel };
     if (screen.kind === "effort" && options.focusedEffort) return { type: "SELECT_EFFORT", effort: options.focusedEffort };
+    if (screen.kind === "coordinator") {
+      if (screen.stage === "settings") return { type: "OPEN_COORDINATOR_SETUP" };
+      const value = options.coordinatorOptions?.[screen.focus];
+      if (value === undefined) return undefined;
+      if (screen.stage === "provider") return { type: "SELECT_COORDINATOR_PROVIDER", provider: value };
+      if (screen.stage === "model") return { type: "SELECT_COORDINATOR_MODEL", model: value };
+      return { type: "SELECT_COORDINATOR_EFFORT", effort: value };
+    }
     if (screen.kind === "delete") return screen.confirmFocus === 0 ? { type: "CONFIRM_DELETE" } : { type: "CANCEL_DELETE" };
   }
   return undefined;
@@ -153,6 +163,30 @@ export async function applyEffortSelection(controller: AgentSuiteController, age
     controller.refresh();
     dispatch({ type: "SELECT_EFFORT", effort });
   } finally { setBusy?.(false); }
+}
+
+export async function applyCoordinatorSelection(controller: AgentSuiteController, provider: string, model: string, effort: string, dispatch: (event: NavEvent) => void, setBusy?: (busy: boolean) => void): Promise<void> {
+  if (!controller.setCoordinator) throw new Error("La configuración del coordinador no está disponible en este host.");
+  setBusy?.(true);
+  try {
+    await controller.setCoordinator({ provider, model, ...(effort ? { effort } : {}) });
+    controller.refresh();
+    dispatch({ type: "SELECT_COORDINATOR_EFFORT", effort });
+  } finally { setBusy?.(false); }
+}
+
+export async function handleCoordinatorSelectionKey(key: KeyEvent, event: NavEvent, state: NavState, controller: AgentSuiteController, dispatch: (event: NavEvent) => void, setError: (error?: string) => void, setBusy?: (busy: boolean) => void): Promise<boolean> {
+  const screen = state.stack.at(-1);
+  if (!isSubmitKey(key) || event.type !== "SELECT_COORDINATOR_EFFORT" || screen?.kind !== "coordinator" || screen.stage !== "effort" || !screen.provider || !screen.model) return false;
+  key.preventDefault();
+  key.stopPropagation();
+  setError(undefined);
+  try {
+    await applyCoordinatorSelection(controller, screen.provider, screen.model, event.effort, dispatch, setBusy);
+  } catch (error) {
+    setError(operationErrorMessage(error));
+  }
+  return true;
 }
 
 export async function handleSelectionKey(key: KeyEvent, event: NavEvent, agentId: string, controller: AgentSuiteController, dispatch: (event: NavEvent) => void, setError: (error?: string) => void, setBusy?: (busy: boolean) => void): Promise<boolean> {
@@ -377,6 +411,9 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
     const modelOptions = focusedRow ? props.modelOptions?.(focusedRow) ?? [] : [];
     const effortOptions = focusedRow ? (props.variantOptions?.(focusedRow, focusedRow.model ?? "") ?? [{ title: "default", value: "" }]).map((option) => option.value || "default") : [];
     const catalogRowCount = current?.kind === "catalog" ? filterCatalogRows([...snapshot.rows, ...(snapshot.disabledRows ?? [])], effectiveCatalogQuery).length : snapshot.rows.length;
+    const coordinatorOptions = current?.kind === "coordinator" && current.stage !== "settings"
+      ? coordinatorSelectionOptions(current.stage, props.coordinatorProviders ?? [], current.provider, current.model).map((option) => option.value)
+      : [];
     const event = eventForKey(key, currentNavigation, catalogRowCount, focusedCatalogAgentId, (() => {
       const screen = currentNavigation.stack.at(-1);
       const row = screen && "agentId" in screen ? [...snapshot.rows, ...(snapshot.disabledRows ?? [])].find((item) => item.id === screen.agentId) : undefined;
@@ -387,6 +424,7 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
         focusedEffort: effortOptions[current?.kind === "effort" ? current.focus : 0],
         models: modelOptions.map((option) => option.value),
         efforts: effortOptions,
+        coordinatorOptions,
         canDelete: row?.membership === "custom",
         isCustom: row?.membership === "custom",
         isEnabled: row?.enabled,
@@ -394,6 +432,12 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
       };
     })());
     if (!event) return;
+    if (event.type === "SELECT_COORDINATOR_EFFORT") {
+      void handleCoordinatorSelectionKey(key, event, currentNavigation, props.controller, dispatch, setOperationError, setBusy).then((handled) => {
+        if (!handled) dispatch(event);
+      });
+      return;
+    }
     if (event.type === "SELECT_MODEL" || event.type === "SELECT_EFFORT") {
       void handleSelectionKey(key, event, focusedRow?.id ?? "", props.controller, dispatch, setOperationError, setBusy);
       return;
@@ -410,10 +454,14 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
       {busy() ? <StatusBadge theme={props.theme} status="info">Guardando cambios…</StatusBadge> : null}
       {renderError() ? <ErrorPanel theme={props.theme} message={renderError()!} onRetry={() => setRenderError(undefined)} onClose={props.onClose} /> : (() => {
         const current = screen();
-        if (current.kind === "landing") return <Landing theme={props.theme} focus={current.focus} onActivate={(index) => dispatch({ type: "ACTIVATE_LANDING_ITEM", index })} />;
+        if (current.kind === "landing") return <Landing theme={props.theme} focus={current.focus} coordinator={props.controller.coordinator?.()} onActivate={(index) => dispatch({ type: "ACTIVATE_LANDING_ITEM", index })} />;
         if (current.kind === "catalog") {
           const catalogRows = [...snapshot().rows, ...(snapshot().disabledRows ?? [])];
            return <Catalog theme={props.theme} rows={catalogRows} page={current.page} focus={current.focus} query={current.query} searchFocused={current.searchFocused} onDraftChange={(value) => { catalogSearchDraft = value; }} onFocusResults={(query) => dispatch({ type: "FOCUS_CATALOG_RESULTS", query })} onFocusSearch={() => { catalogSearchDraft = current.query; dispatch({ type: "FOCUS_CATALOG_SEARCH" }); }} onMoveFocus={(delta, maxFocus) => dispatch({ type: "MOVE_FOCUS", delta, maxFocus })} onActivate={(identity) => dispatch({ type: "ACTIVATE_AGENT", agentId: identity.agentId })} onPage={(delta) => dispatch({ type: "PAGE", delta, maxPage: Math.max(0, Math.ceil(filterCatalogRows(catalogRows, current.searchFocused ? catalogSearchDraft : current.query).length / 6) - 1) })} />;
+        }
+        if (current.kind === "coordinator") {
+          const providers = props.coordinatorProviders ?? [];
+          return <CoordinatorConfig theme={props.theme} stage={current.stage} focus={current.focus} coordinator={props.controller.coordinator?.()} providers={providers} provider={current.provider} model={current.model} onSetup={() => dispatch({ type: "OPEN_COORDINATOR_SETUP" })} onProvider={(provider) => dispatch({ type: "SELECT_COORDINATOR_PROVIDER", provider })} onModel={(model) => dispatch({ type: "SELECT_COORDINATOR_MODEL", model })} onEffort={(effort) => { if (!current.provider || !current.model) return; setOperationError(undefined); void applyCoordinatorSelection(props.controller, current.provider, current.model, effort, dispatch, setBusy).catch((caught) => setOperationError(operationErrorMessage(caught))); }} />;
         }
            const catalogSource = current.kind === "info" || current.kind === "modify" || current.kind === "model" || current.kind === "effort" || current.kind === "delete" ? (current as { agentId: string }).agentId : undefined;
            const row = catalogSource ? [...snapshot().rows, ...(snapshot().disabledRows ?? [])].find((item) => item.id === catalogSource) : undefined;
