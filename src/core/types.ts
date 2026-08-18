@@ -18,6 +18,12 @@ export interface BaseAgentOverride {
   operations?: string;
 }
 
+export interface CoordinatorConfig {
+  provider: string;
+  model: string;
+  effort?: string;
+}
+
 export interface SuiteConfig {
   version: 1;
   customAgents: Record<string, CustomAgent>;
@@ -25,6 +31,7 @@ export interface SuiteConfig {
   variantAssignments: Record<string, string>;
   baseOverrides?: Record<string, BaseAgentOverride>;
   disabledAgents?: string[];
+  coordinator?: CoordinatorConfig;
 }
 
 export interface AgentCatalogRow {

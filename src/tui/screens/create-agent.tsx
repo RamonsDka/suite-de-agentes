@@ -2,11 +2,16 @@ import type { JSX } from "@opentui/solid";
 import type { TuiTheme } from "@opencode-ai/plugin/tui";
 import type { CreateDraft } from "../agent-suite-nav.ts";
 import { Divider, FieldRow, SectionPanel, StatusBadge } from "../visual-primitives.tsx";
+import { editorSaveStatus } from "./ai-preview.tsx";
 
 export const CREATE_FIELDS: readonly (keyof CreateDraft)[] = ["id", "description", "skills", "operations", "model", "effort"];
 
 export function createDraftFields(): readonly (keyof CreateDraft)[] {
   return CREATE_FIELDS;
+}
+
+export function createSubmissionAction(step: 0 | 1 | 2 | 3 | 4 | 5, canAuthor: boolean): "author" | "next" | "submit" {
+  return step === 5 ? "submit" : step === 3 && canAuthor ? "author" : "next";
 }
 
 export function validateCreateStep(draft: CreateDraft, step: 0 | 1 | 2 | 3 | 4 | 5, existingIds: readonly string[] = []): string | undefined {
@@ -39,6 +44,8 @@ export interface CreateAgentProps {
   onInput: (field: keyof CreateDraft, value: string | string[]) => void;
   onNext: () => void;
   onPrevious: () => void;
+  canAuthor?: boolean;
+  onAuthor?: () => void;
   onSubmit: () => void;
 }
 
@@ -76,9 +83,10 @@ export function CreateAgent(props: CreateAgentProps): JSX.Element {
     <box flexDirection="column" gap={1}>
       <SectionPanel theme={props.theme} title={presentation().heading}>
         <FieldRow theme={props.theme} label="Campo" value={presentation().label} />
-        <input focused value={presentation().value} placeholder={presentation().label} onInput={submit} onSubmit={(next) => { if (typeof next === "string") submit(next); props.step === 5 ? props.onSubmit() : props.onNext(); }} />
+        <input focused value={presentation().value} placeholder={presentation().label} onInput={submit} onSubmit={(next) => { if (typeof next === "string") submit(next); const action = createSubmissionAction(props.step, props.canAuthor === true); if (action === "author") props.onAuthor?.(); else if (action === "submit") props.onSubmit(); else props.onNext(); }} />
       </SectionPanel>
       <Divider theme={props.theme} />
+      {props.step === 5 ? <StatusBadge theme={props.theme} status={editorSaveStatus(true).status}>{editorSaveStatus(true).label}</StatusBadge> : null}
       {props.error ? <StatusBadge theme={props.theme} status="error">{props.error}</StatusBadge> : null}
     </box>
   );

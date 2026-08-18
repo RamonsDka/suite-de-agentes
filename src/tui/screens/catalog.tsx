@@ -5,8 +5,8 @@ import type { TuiTheme } from "@opencode-ai/plugin/tui";
 import type { MouseEvent } from "@opentui/core";
 import type { AgentCatalogRow } from "../../core/types.ts";
 import { filterCatalogRows, MAX_VISIBLE_ROWS, pageCount, pageRows } from "../agent-suite-vm.ts";
-import { Divider, SelectableRow } from "../visual-primitives.tsx";
-import { formatCatalogName } from "../visual-tokens.ts";
+import { Divider, searchInputPresentation, SelectableRow } from "../visual-primitives.tsx";
+import { createVisualTokens, formatCatalogName } from "../visual-tokens.ts";
 
 export interface CatalogProps {
   theme: TuiTheme;
@@ -69,6 +69,7 @@ export function catalogRowLabel(row: Pick<AgentCatalogRow, "id"> & { disabled?: 
 
 export function Catalog(props: CatalogProps): JSX.Element {
   const colors = () => props.theme.current;
+  const search = () => searchInputPresentation(props.theme, props.searchFocused === true);
   const [draftQuery, setDraftQuery] = createSignal(props.query ?? "");
   const filteredRows = () => filterCatalogRows(props.rows, draftQuery());
   const visibleRows = () => pageRows(filteredRows(), props.page);
@@ -84,8 +85,8 @@ export function Catalog(props: CatalogProps): JSX.Element {
   return (
     <box flexDirection="column" gap={1} onMouseScroll={handleWheel}>
       <box flexDirection="column" gap={1}>
-        <text fg={colors().textMuted}>Buscar agente</text>
-        <input focused={props.searchFocused === true} value={draftQuery()} placeholder="Escribe un nombre…" onMouseDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); props.onFocusSearch?.(); }} onMouseUp={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); }} onKeyDown={(key) => { if (isCatalogSearchEscape(key)) { key.preventDefault(); key.stopPropagation(); props.onFocusResults?.(draftQuery()); return; } const delta = catalogFocusDelta(key); if (delta === undefined) return; key.preventDefault(); key.stopPropagation(); props.onFocusResults?.(draftQuery()); props.onMoveFocus?.(delta, Math.max(0, Math.min(5, filterCatalogRows(props.rows, draftQuery()).length - props.page * MAX_VISIBLE_ROWS - 1))); }} onInput={(value) => { setDraftQuery(value); props.onDraftChange?.(value); }} onSubmit={() => { props.onFocusResults?.(draftQuery()); }} />
+        <text fg={createVisualTokens(colors()).form.label}>Buscar agente</text>
+        <box backgroundColor={search().background} borderStyle="single" borderColor={search().border}><input focused={props.searchFocused === true} value={draftQuery()} placeholder="Escribe un nombre…" onMouseDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); props.onFocusSearch?.(); }} onMouseUp={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); }} onKeyDown={(key) => { if (isCatalogSearchEscape(key)) { key.preventDefault(); key.stopPropagation(); props.onFocusResults?.(draftQuery()); return; } const delta = catalogFocusDelta(key); if (delta === undefined) return; key.preventDefault(); key.stopPropagation(); props.onFocusResults?.(draftQuery()); props.onMoveFocus?.(delta, Math.max(0, Math.min(5, filterCatalogRows(props.rows, draftQuery()).length - props.page * MAX_VISIBLE_ROWS - 1))); }} onInput={(value) => { setDraftQuery(value); props.onDraftChange?.(value); }} onSubmit={() => { props.onFocusResults?.(draftQuery()); }} /></box>
       </box>
       <text fg={colors().textMuted}>Página {props.page + 1}/{maxPage() + 1} · {MAX_VISIBLE_ROWS} filas por página</text>
       <Divider theme={props.theme} />

@@ -3,7 +3,7 @@ import { reduceNav, type NavState } from "../src/tui/agent-suite-nav.ts";
 import { eventForKey } from "../src/tui/agent-suite-app.tsx";
 import type { KeyEvent } from "@opencode-ai/plugin/tui";
 import { advanceCreateDraft, applyCreateSubmission } from "../src/tui/agent-suite-app.tsx";
-import { createDraftFields, createStepPresentation, validateCreateDraft, validateCreateStep } from "../src/tui/screens/create-agent.tsx";
+import { createDraftFields, createStepPresentation, createSubmissionAction, validateCreateDraft, validateCreateStep } from "../src/tui/screens/create-agent.tsx";
 import type { CreateDraft } from "../src/tui/agent-suite-nav.ts";
 import { createAgentSuiteController } from "../src/tui/agent-suite-controller.ts";
 import type { AgentSuiteController } from "../src/tui/agent-suite-controller.ts";
@@ -113,5 +113,11 @@ describe("Agent Suite create agent", () => {
       label: "Skills",
       value: "testing",
     });
+  });
+
+  it("requests configured authoring after operations while retaining manual progression otherwise", () => {
+    expect(createSubmissionAction(3, true)).toBe("author");
+    expect(createSubmissionAction(3, false)).toBe("next");
+    expect(createSubmissionAction(5, true)).toBe("submit");
   });
 });

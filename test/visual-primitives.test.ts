@@ -1,7 +1,8 @@
 import { RGBA } from "@opentui/core";
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui";
-import { describe, expect, it } from "vitest";
-import { agentInfoSections, currentValueCue, screenKeyHints, selectableRowPresentation, selectionErrorPresentation } from "../src/tui/visual-primitives.tsx";
+import { describe, expect, it, vi } from "vitest";
+import { agentInfoSections, createSafeMouseActivation, currentValueCue, keyHintPresentation, screenKeyHints, screenKeyHintsForScreen, searchInputPresentation, selectableRowPresentation } from "../src/tui/visual-primitives.tsx";
+import { SUITE_SHELL_LAYOUT } from "../src/tui/screens/suite-shell.tsx";
 
 const row = {
   id: "custom-agent", membership: "custom" as const, enabled: true, model: "openai/gpt-5",
@@ -23,21 +24,40 @@ describe("visual primitives", () => {
     });
   });
 
-  it("provides a textual current-model cue and optional selection error presentation", () => {
-    expect(currentValueCue("openai/gpt-5")).toBe("openai/gpt-5 · Modelo actual");
-    expect(selectionErrorPresentation("write failed")).toEqual({ status: "error", message: "write failed" });
-    expect(selectionErrorPresentation()).toBeUndefined();
+  it("keeps the semantic info accent on current rows whether focused or not", () => {
+    expect(selectableRowPresentation({ current } as never, false, "info").border).toBe(current.info);
+    expect(selectableRowPresentation({ current } as never, true, "info").border).toBe(current.info);
   });
 
-  it("uses a semantic status color without changing selected-row markers", () => {
-    expect(selectableRowPresentation({ current } as never, true, "info")).toMatchObject({ marker: "► ", foreground: current.info, border: current.info });
+  it("uses the semantic status color for a labeled configuration state", () => {
+    expect(selectableRowPresentation({ current } as never, false, "success")).toMatchObject({ foreground: current.success, border: current.success });
+    expect(selectableRowPresentation({ current } as never, false, "error")).toMatchObject({ foreground: current.error, border: current.error });
+  });
+
+  it("provides one Spanish non-color cue for a current model", () => {
+    expect(currentValueCue("openai/gpt-5")).toBe("openai/gpt-5 · Modelo actual");
+    expect(currentValueCue("openai/gpt-5")).not.toContain("✓");
   });
 
   it("returns screen-specific key hints", () => {
     expect(screenKeyHints("catalog")).toContain("Página");
     expect(screenKeyHints("catalog")).toContain("Info");
     expect(screenKeyHints("landing")).toContain("Catálogo");
+    expect(screenKeyHints("landing")).toContain("Configuración");
+    expect(screenKeyHints("landing")).not.toContain("Desactivados");
+    expect(screenKeyHints("catalog")).toContain("buscar");
+    expect(screenKeyHints("catalog")).toContain("/");
     expect(screenKeyHints("landing")).not.toContain("Página");
+  });
+
+  it("presents finalization and focused search with their semantic visual treatments", () => {
+    const finalHint = screenKeyHintsForScreen({ kind: "create", step: 5 } as never);
+    const search = searchInputPresentation({ current } as never, true);
+
+    expect(finalHint).toContain("Finalizar");
+    expect(keyHintPresentation({ current } as never, finalHint)).toBe(current.warning);
+    expect(search.background.a).toBeLessThan(1);
+    expect(search.border).toBe(current.primary);
   });
 
   it("groups agent information into recognizable sections", () => {
@@ -47,5 +67,74 @@ describe("visual primitives", () => {
       { title: "Modelo y esfuerzo", fields: [["Modelo", "openai/gpt-5"], ["Esfuerzo", "high"]] },
       { title: "Skills y operaciones", fields: [["Skills", "testing, github"], ["Operaciones", "Review pull requests"]] },
     ]);
+  });
+
+  it("keeps the host shell as the single accent-framed boundary", () => {
+    expect(SUITE_SHELL_LAYOUT).toMatchObject({ borderStyle: "single" });
+  });
+
+  it("consumes a complete mouse click and activates exactly once", () => {
+    const activate = vi.fn();
+    const backdrop = vi.fn();
+    const handlers = createSafeMouseActivation(activate);
+    const event = () => {
+      let propagationStopped = false;
+      return {
+        button: 0,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(() => { propagationStopped = true; }),
+        get propagationStopped() { return propagationStopped; },
+      } as unknown as import("@opentui/core").MouseEvent;
+    };
+
+    const dispatch = (handler: (event: import("@opentui/core").MouseEvent) => void, mouseEvent: import("@opentui/core").MouseEvent) => {
+      handler(mouseEvent);
+      if (!mouseEvent.propagationStopped) backdrop();
+    };
+
+    const down = event();
+    const up = event();
+    dispatch(handlers.onMouseDown, down);
+    dispatch(handlers.onMouseUp, up);
+    expect(activate).toHaveBeenCalledTimes(1);
+    expect(backdrop).toHaveBeenCalledTimes(0);
+    expect(down.preventDefault).toHaveBeenCalledTimes(1);
+    expect(up.stopPropagation).toHaveBeenCalledTimes(1);
+  });
+
+  it("resets shared mouse activation across cross-row releases", () => {
+    const activateA = vi.fn();
+    const activateB = vi.fn();
+    const backdrop = vi.fn();
+    const rowA = createSafeMouseActivation(activateA);
+    const rowB = createSafeMouseActivation(activateB);
+    const event = () => {
+      let propagationStopped = false;
+      return {
+        button: 0,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(() => { propagationStopped = true; }),
+        get propagationStopped() { return propagationStopped; },
+      } as unknown as import("@opentui/core").MouseEvent;
+    };
+    const dispatch = (handler: (event: import("@opentui/core").MouseEvent) => void, mouseEvent: import("@opentui/core").MouseEvent) => {
+      handler(mouseEvent);
+      if (!mouseEvent.propagationStopped) backdrop();
+    };
+
+    dispatch(rowA.onMouseDown, event());
+    dispatch(rowB.onMouseUp, event());
+    dispatch(rowB.onMouseDown, event());
+    dispatch(rowA.onMouseUp, event());
+
+    expect(activateA).not.toHaveBeenCalled();
+    expect(activateB).not.toHaveBeenCalled();
+
+    dispatch(rowB.onMouseDown, event());
+    dispatch(rowB.onMouseUp, event());
+
+    expect(activateA).not.toHaveBeenCalled();
+    expect(activateB).toHaveBeenCalledTimes(1);
+    expect(backdrop).not.toHaveBeenCalled();
   });
 });
