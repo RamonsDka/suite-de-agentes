@@ -1,5 +1,6 @@
 export * from "./types.ts";
 export * from "./coordinator.ts";
+export * from "./skill-catalog.ts";
 export * from "./config.ts";
 export * from "./grants.ts";
 export * from "./policy.ts";
