@@ -4,7 +4,7 @@ import type { KeyEvent } from "@opencode-ai/plugin/tui";
 import type { MouseEvent } from "@opentui/core";
 import type { TuiDialogSelectOption, TuiTheme } from "@opencode-ai/plugin/tui";
 import { initialNavState, reduceNav, type NavEvent, type NavState } from "./agent-suite-nav.ts";
-import { modifyOptions } from "./agent-suite-vm.ts";
+import { modifyOptions, type EditorField } from "./agent-suite-vm.ts";
 import type { AgentSuiteController } from "./agent-suite-controller.ts";
 import { screenTitle } from "./agent-suite-vm.ts";
 import { filterCatalogRows, pageCount, pageRows } from "./agent-suite-vm.ts";
@@ -45,13 +45,16 @@ export function handleNestedScreenEscape(state: NavState, dispatch: (event: NavE
   return true;
 }
 
-function modifyOptionAtFocus(row: Pick<import("../core/types.ts").AgentCatalogRow, "membership"> | undefined, focus: number): "model" | "effort" | "skills" | "operations" | "back" {
-  const labels = row ? modifyOptions(row) : ["model", "effort", "skills", "operations", "back"];
+function modifyOptionAtFocus(row: Pick<import("../core/types.ts").AgentCatalogRow, "membership"> | undefined, focus: number, fullBaseEditing = false): EditorField | "back" {
+  const labels = row ? modifyOptions({ ...row, fullBaseEditing }) : ["model", "effort", "skills", "operations", "back"];
   const option = labels[focus];
-  return option === "Modelo de IA" || option === "model" ? "model"
+  return option === "Modificar nombre" || option === "Identificador" || option === "id" ? "id"
+    : option === "Descripción" || option === "description" ? "description"
+    : option === "Modelo de IA" || option === "model" ? "model"
     : option === "Nivel de esfuerzo" || option === "effort" ? "effort"
       : option === "Skills" || option === "skills" ? "skills"
         : option === "Operaciones" || option === "operations" ? "operations"
+          : option === "Eliminar" || option === "delete" ? "delete"
           : "back";
 }
 
@@ -84,7 +87,14 @@ function eventForKey(key: KeyEvent, state: NavState, catalogRowCount = 0, focuse
       if (options.isCustom === true) return screen.focus === 0 ? { type: "OPEN_MODIFY", agentId: screen.agentId, custom: true } : screen.focus === 1 ? { type: "REQUEST_DELETE", agentId: screen.agentId } : { type: "BACK" };
       return screen.focus === 0 ? { type: "OPEN_MODIFY", agentId: screen.agentId, custom: false } : screen.focus === 1 ? { type: "DEACTIVATE_AGENT", agentId: screen.agentId } : { type: "BACK" };
     }
-    if (screen.kind === "modify" && screen.edit.mode === "menu") return { type: "MODIFY_ACTIVATE", option: modifyOptionAtFocus(options.isCustom === undefined ? undefined : { membership: options.isCustom ? "custom" : "seed" }, screen.focus) };
+    if (screen.kind === "modify" && screen.edit.mode === "menu") {
+      const optionCount = options.modifyOptionCount ?? (options.isCustom ? 5 : 3);
+      const legacy = optionCount === (options.isCustom ? 5 : 3);
+      const option = legacy
+        ? (options.isCustom ? ["model", "effort", "skills", "operations", "back"] : ["model", "effort", "back"])[screen.focus] ?? "back"
+        : modifyOptionAtFocus(options.isCustom === undefined ? undefined : { membership: options.isCustom ? "custom" : "seed" }, screen.focus, screen.protectedBase === true);
+      return { type: "MODIFY_ACTIVATE", option: option as EditorField | "back" };
+    }
     if (screen.kind === "modify" && screen.edit.mode === "skills") return { type: "EDIT_COMMIT" };
     if (screen.kind === "modify" && screen.edit.mode === "operations") return { type: "EDIT_COMMIT" };
     if (screen.kind === "model" && options.focusedModel) return { type: "SELECT_MODEL", model: options.focusedModel };
