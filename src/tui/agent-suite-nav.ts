@@ -18,11 +18,11 @@ export type CreateDraft = {
 
 export type AppScreen =
   | { kind: "landing"; focus: 0 | 1 }
-  | { kind: "catalog"; page: number; focus: number }
+  | { kind: "catalog"; page: number; focus: number; query: string; searchFocused: boolean }
   | { kind: "info"; agentId: string; focus: number }
   | { kind: "model"; agentId: string; focus: number }
   | { kind: "effort"; agentId: string; focus: number }
-  | { kind: "modify"; agentId: string; focus: number; edit: ModifyEdit; editable?: boolean }
+  | { kind: "modify"; agentId: string; focus: number; edit: ModifyEdit; editable?: boolean; protectedBase?: boolean }
   | { kind: "delete"; agentId: string; confirmFocus: 0 | 1 }
   | { kind: "create"; step: 0 | 1 | 2 | 3 | 4 | 5; draft: CreateDraft; focus: number };
 
@@ -36,9 +36,14 @@ export type NavState = {
 export type NavEvent =
   | { type: "ACTIVATE_LANDING_ITEM"; index: number }
   | { type: "ACTIVATE_AGENT"; agentId: string }
+  | { type: "CATALOG_QUERY"; value: string }
+  | { type: "FOCUS_CATALOG_RESULTS"; query?: string }
+  | { type: "FOCUS_CATALOG_SEARCH" }
   | { type: "MOVE_FOCUS"; delta: -1 | 1; maxFocus?: number }
   | { type: "PAGE"; delta: -1 | 1; maxPage?: number }
   | { type: "OPEN_MODIFY"; agentId?: string; custom?: boolean }
+  | { type: "DEACTIVATE_AGENT"; agentId: string }
+  | { type: "REACTIVATE_AGENT"; agentId: string }
   | { type: "MODIFY_ACTIVATE"; option: "id" | "description" | "model" | "effort" | "skills" | "operations" | "delete" | "back"; skills?: string[]; operations?: string; value?: string }
   | { type: "SELECT_MODEL"; model: string }
   | { type: "SELECT_EFFORT"; effort: string }
@@ -95,7 +100,7 @@ function stepCreate(screen: Extract<AppScreen, { kind: "create" }>, delta: -1 | 
 }
 
 function modifyMaxFocus(screen: Extract<AppScreen, { kind: "modify" }>): number {
-  return editorFields({ membership: screen.editable === true ? "custom" : "seed" }).length - 1;
+  return editorFields({ membership: screen.editable === true ? "custom" : "seed", fullBaseEditing: screen.protectedBase === true }).length - 1;
 }
 
 function skillDraft(skills: string[], focus = 0, adding = false, input = ""): Extract<ModifyEdit, { mode: "skills" }> {
@@ -113,14 +118,21 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
     case "ACTIVATE_LANDING_ITEM":
       if (screen.kind !== "landing") return state;
       return event.index === 0
-        ? push(state, { kind: "catalog", page: 0, focus: 0 })
+        ? push(state, { kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false })
         : event.index === 1 ? push(state, { kind: "create", step: 0, draft: { ...EMPTY_DRAFT, skills: [] }, focus: 0 }) : state;
     case "ACTIVATE_AGENT":
       return screen.kind === "catalog" ? push(state, { kind: "info", agentId: event.agentId, focus: 0 }) : state;
+    case "CATALOG_QUERY":
+      return screen.kind === "catalog" ? replaceTop(state, { ...screen, page: 0, focus: 0, query: event.value, searchFocused: true }) : state;
+    case "FOCUS_CATALOG_RESULTS":
+      return screen.kind === "catalog" ? replaceTop(state, { ...screen, query: event.query ?? screen.query, searchFocused: false }) : state;
+    case "FOCUS_CATALOG_SEARCH":
+      return screen.kind === "catalog" ? replaceTop(state, { ...screen, searchFocused: true }) : state;
     case "MOVE_FOCUS": {
       const max = event.maxFocus ?? (screen.kind === "landing" ? 1 : screen.kind === "modify" && screen.edit.mode === "menu" ? modifyMaxFocus(screen) : screen.kind === "modify" && screen.edit.mode === "skills" ? screen.edit.skills.length : screen.kind === "delete" ? 1 : 0);
       if (screen.kind === "landing") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) as 0 | 1 });
-      if (screen.kind === "catalog" || screen.kind === "info" || screen.kind === "model" || screen.kind === "effort" || screen.kind === "create") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) });
+      if (screen.kind === "catalog") return replaceTop(state, { ...screen, searchFocused: false, focus: clamp(screen.focus + event.delta, max) });
+      if (screen.kind === "info" || screen.kind === "model" || screen.kind === "effort" || screen.kind === "create") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) });
       if (screen.kind === "modify" && screen.edit.mode === "menu") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) });
       if (screen.kind === "modify" && screen.edit.mode === "skills") return replaceTop(state, { ...screen, edit: { ...screen.edit, focus: clamp(screen.edit.focus + event.delta, max) } });
       if (screen.kind === "delete") return replaceTop(state, { ...screen, confirmFocus: clamp(screen.confirmFocus + event.delta, 1) as 0 | 1 });
@@ -128,25 +140,27 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
     }
     case "PAGE":
       if (screen.kind !== "catalog") return state;
-      return replaceTop(state, { ...screen, page: Math.max(0, Math.min(event.maxPage ?? Number.MAX_SAFE_INTEGER, screen.page + event.delta)), focus: 0 });
+      return replaceTop(state, { ...screen, page: Math.max(0, Math.min(event.maxPage ?? Number.MAX_SAFE_INTEGER, screen.page + event.delta)), focus: 0, searchFocused: false });
     case "OPEN_MODIFY":
       if (screen.kind !== "info") return state;
       return push(state, event.custom === true
         ? { kind: "modify", agentId: event.agentId ?? screen.agentId, focus: 0, edit: { mode: "menu" }, editable: true }
-        : { kind: "modify", agentId: event.agentId ?? screen.agentId, focus: 0, edit: { mode: "menu" } });
+        : { kind: "modify", agentId: event.agentId ?? screen.agentId, focus: 0, edit: { mode: "menu" }, protectedBase: true });
     case "MODIFY_ACTIVATE":
       if (screen.kind !== "modify" || screen.edit.mode !== "menu") return state;
       if (event.option === "model") return push(state, { kind: "model", agentId: screen.agentId, focus: 0 });
       if (event.option === "effort") return push(state, { kind: "effort", agentId: screen.agentId, focus: 0 });
-      if (screen.editable !== true) return event.option === "back" ? pop(state) : state;
+      if (screen.editable !== true && screen.protectedBase !== true && event.option !== "back") return state;
+      if (screen.protectedBase === true && (event.option === "id" || event.option === "delete")) return state;
       if (event.option === "id" || event.option === "description") return replaceTop(state, { ...screen, edit: { mode: "text", field: event.option, value: event.value ?? "" } });
       if (event.option === "skills") return replaceTop(state, { ...screen, edit: skillDraft(event.skills ?? []) });
       if (event.option === "operations") return replaceTop(state, { ...screen, edit: { mode: "text", field: "operations", value: event.operations ?? event.value ?? "" } });
       if (event.option === "delete") return push(state, { kind: "delete", agentId: screen.agentId, confirmFocus: 1 });
       return pop(state);
     case "SELECT_MODEL":
+      return screen.kind === "model" ? push(pop(state), { kind: "effort", agentId: screen.agentId, focus: 0 }) : state;
     case "SELECT_EFFORT":
-      return screen.kind === "model" || screen.kind === "effort" ? pop(state) : state;
+      return screen.kind === "effort" ? pop(state) : state;
     case "EDIT_SKILLS_TOGGLE": {
       if (screen.kind !== "modify" || screen.edit.mode !== "skills") return state;
       const skill = event.skill ?? screen.edit.skills[event.index];
@@ -198,7 +212,7 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
     case "CREATE_PREV":
       return screen.kind === "create" ? replaceTop(state, stepCreate(screen, -1)) : state;
     case "CREATE_SUBMIT":
-      return state;
+      return screen.kind === "create" ? replaceTop(state, { kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false }) : state;
     case "BACK":
       if (screen.kind === "modify" && screen.edit.mode !== "menu") return replaceTop(state, { ...screen, edit: { mode: "menu" } });
       if (screen.kind === "create" && screen.step > 0) return replaceTop(state, stepCreate(screen, -1));

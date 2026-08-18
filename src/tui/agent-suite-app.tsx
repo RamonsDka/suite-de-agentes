@@ -7,6 +7,7 @@ import { initialNavState, reduceNav, type NavEvent, type NavState } from "./agen
 import { modifyOptions } from "./agent-suite-vm.ts";
 import type { AgentSuiteController } from "./agent-suite-controller.ts";
 import { screenTitle } from "./agent-suite-vm.ts";
+import { filterCatalogRows, pageCount, pageRows } from "./agent-suite-vm.ts";
 import { SuiteShell } from "./screens/suite-shell.tsx";
 import { Landing } from "./screens/landing.tsx";
 import { Catalog } from "./screens/catalog.tsx";
@@ -18,6 +19,7 @@ import { DeleteWarning } from "./screens/delete-warning.tsx";
 import { ErrorPanel } from "./screens/error-panel.tsx";
 import { CreateAgent, validateCreateDraft, validateCreateStep } from "./screens/create-agent.tsx";
 import type { CreateDraft, AppScreen } from "./agent-suite-nav.ts";
+import { isSubmitKey } from "./key-handling.ts";
 
 export interface AgentSuiteAppProps {
   theme: TuiTheme;
@@ -53,11 +55,16 @@ function modifyOptionAtFocus(row: Pick<import("../core/types.ts").AgentCatalogRo
           : "back";
 }
 
-function eventForKey(key: KeyEvent, state: NavState, catalogRowCount = 0, focusedCatalogAgentId?: string, options: { infoActionCount?: number; modifyOptionCount?: number; focusedModel?: string; focusedEffort?: string; models?: readonly string[]; efforts?: readonly string[]; canDelete?: boolean; isCustom?: boolean } = {}): NavEvent | undefined {
+function eventForKey(key: KeyEvent, state: NavState, catalogRowCount = 0, focusedCatalogAgentId?: string, options: { infoActionCount?: number; modifyOptionCount?: number; focusedModel?: string; focusedEffort?: string; models?: readonly string[]; efforts?: readonly string[]; canDelete?: boolean; isCustom?: boolean; isEnabled?: boolean; isDisabled?: boolean } = {}): NavEvent | undefined {
   const screen = state.stack.at(-1);
   if (!screen || state.closing) return undefined;
-  if (key.name === "escape") return screen.kind === "landing" ? { type: "REQUEST_CLOSE" } : { type: "BACK" };
-  if (key.name === "f10") return { type: "REQUEST_CLOSE" };
+  if (key.name === "escape") {
+    if (screen.kind === "catalog" && screen.searchFocused === true) return undefined;
+    return screen.kind === "landing" ? { type: "REQUEST_CLOSE" } : { type: "BACK" };
+  }
+  if (key.name === "f10") return screen.kind === "catalog" && screen.searchFocused === true ? undefined : { type: "REQUEST_CLOSE" };
+  if (screen.kind === "catalog" && screen.searchFocused) return undefined;
+  if (key.name === "/" && screen.kind === "catalog") return { type: "FOCUS_CATALOG_SEARCH" };
   if (key.name === "f2") return { type: "ACTIVATE_LANDING_ITEM", index: 0 };
   if (key.name === "f3") return { type: "ACTIVATE_LANDING_ITEM", index: 1 };
   if (key.name === "f5" && screen.kind === "info") return { type: "OPEN_MODIFY", agentId: screen.agentId, custom: options.isCustom };
@@ -67,12 +74,16 @@ function eventForKey(key: KeyEvent, state: NavState, catalogRowCount = 0, focuse
   if (key.name === "down" || key.name === "right") return { type: "MOVE_FOCUS", delta: 1, maxFocus };
   if (key.name === "pageup") return screen.kind === "catalog" ? { type: "PAGE", delta: -1, maxPage: Math.max(0, Math.ceil(catalogRowCount / 6) - 1) } : undefined;
   if (key.name === "pagedown") return screen.kind === "catalog" ? { type: "PAGE", delta: 1, maxPage: Math.max(0, Math.ceil(catalogRowCount / 6) - 1) } : undefined;
-  if (key.name === "return" || key.name === "linefeed") {
+  if (isSubmitKey(key)) {
     if (screen.kind === "create") return undefined;
     if (screen.kind === "modify" && screen.edit.mode === "operations") return undefined;
     if (screen.kind === "landing") return { type: "ACTIVATE_LANDING_ITEM", index: screen.focus };
     if (screen.kind === "catalog" && focusedCatalogAgentId) return { type: "ACTIVATE_AGENT", agentId: focusedCatalogAgentId };
-    if (screen.kind === "info") return screen.focus === 0 ? { type: "OPEN_MODIFY", agentId: screen.agentId, custom: options.isCustom } : screen.focus === 1 && options.isCustom === true ? { type: "REQUEST_DELETE", agentId: screen.agentId } : { type: "BACK" };
+    if (screen.kind === "info") {
+      if (options.isDisabled === true) return screen.focus === 0 ? { type: "REACTIVATE_AGENT", agentId: screen.agentId } : { type: "BACK" };
+      if (options.isCustom === true) return screen.focus === 0 ? { type: "OPEN_MODIFY", agentId: screen.agentId, custom: true } : screen.focus === 1 ? { type: "REQUEST_DELETE", agentId: screen.agentId } : { type: "BACK" };
+      return screen.focus === 0 ? { type: "OPEN_MODIFY", agentId: screen.agentId, custom: false } : screen.focus === 1 ? { type: "DEACTIVATE_AGENT", agentId: screen.agentId } : { type: "BACK" };
+    }
     if (screen.kind === "modify" && screen.edit.mode === "menu") return { type: "MODIFY_ACTIVATE", option: modifyOptionAtFocus(options.isCustom === undefined ? undefined : { membership: options.isCustom ? "custom" : "seed" }, screen.focus) };
     if (screen.kind === "modify" && screen.edit.mode === "skills") return { type: "EDIT_COMMIT" };
     if (screen.kind === "modify" && screen.edit.mode === "operations") return { type: "EDIT_COMMIT" };
@@ -99,6 +110,20 @@ export async function applyEffortSelection(controller: AgentSuiteController, age
     controller.refresh();
     dispatch({ type: "SELECT_EFFORT", effort });
   } finally { setBusy?.(false); }
+}
+
+export function normalizeCatalogState(state: NavState, rows: readonly Pick<import("../core/types.ts").AgentCatalogRow, "id">[]): NavState {
+  return {
+    ...state,
+    stack: state.stack.map((screen) => {
+      if (screen.kind !== "catalog") return screen;
+      const filtered = filterCatalogRows(rows, screen.query);
+      const maxPage = pageCount(filtered.length) - 1;
+      const page = Math.max(0, Math.min(maxPage, screen.page));
+      const maxFocus = Math.max(0, pageRows(filtered, page).length - 1);
+      return { ...screen, page, focus: Math.max(0, Math.min(maxFocus, screen.focus)) };
+    }),
+  };
 }
 
 export async function confirmDelete(controller: AgentSuiteController, agentId: string, dispatch: (event: NavEvent) => void): Promise<string | undefined> {

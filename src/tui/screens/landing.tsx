@@ -31,7 +31,7 @@ export function landingMouseActivation(event: MouseEvent, index: 0 | 1, activate
 
 export function Landing(props: LandingProps): JSX.Element {
   const item = (row: LandingRow, index: number) => (
-    <SelectableRow theme={props.theme} selected={row.selected} onMouseDown={(event) => landingMouseActivation(event, index === 0 ? 0 : 1, props.onActivate)}>
+      <SelectableRow theme={props.theme} selected={row.selected} onActivate={() => props.onActivate(index as 0 | 1)}>
       {row.label}
     </SelectableRow>
   );
