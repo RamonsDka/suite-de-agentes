@@ -19,7 +19,7 @@ export interface AgentSuiteController {
   setEffort(id: string, variant: string): Promise<void>;
   setSkills(id: string, skills: string[]): Promise<void>;
   setOperations(id: string, prompt: string): Promise<void>;
-  patchAgent?(id: string, patch: AgentPatch): Promise<void>;
+  patchAgent(id: string, patch: AgentPatch): Promise<void>;
   operations?(id: string): string | undefined;
 }
 
