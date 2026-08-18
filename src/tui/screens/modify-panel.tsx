@@ -18,7 +18,6 @@ export interface ModifyPanelProps {
   busy?: boolean;
   onActivate: (option: EditorField | "back") => void;
   onToggleSkill?: (index: number, skill: string) => void;
-  onOperationsInput?: (value: string) => void;
   onStartSkillAdd?: () => void;
   onSkillAdd?: (value?: string) => void;
   onCommit?: (value?: string) => void;
