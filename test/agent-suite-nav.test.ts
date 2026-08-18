@@ -61,31 +61,70 @@ describe("Agent Suite navigation", () => {
 
   it("derives provider, model, and effort choices from runtime data without closing the effort vocabulary", () => {
     const runtime = [{ id: "openai", name: "OpenAI", models: { "gpt-5": { id: "gpt-5", name: "GPT-5", variants: { high: {}, "extra-high": {} } } } }];
+    const providers = coordinatorProviderOptions(runtime);
 
-    expect(coordinatorProviderOptions(runtime).map(({ value }) => value)).toEqual(["openai"]);
+    expect(providers.map(({ value }) => value)).toEqual(["openai"]);
     expect(coordinatorModelOptions(runtime, "openai")).toEqual([{ title: "GPT-5", value: "gpt-5" }]);
     expect(coordinatorEffortOptions(runtime, "openai", "gpt-5")).toEqual([
-      { title: "Predeterminado", value: "" }, { title: "high", value: "high" }, { title: "extra-high", value: "extra-high" },
+      { title: "Predeterminado", value: "" },
+      { title: "high", value: "high" },
+      { title: "extra-high", value: "extra-high" },
     ]);
     expect(coordinatorSelectionOptions("effort", runtime, "openai", "gpt-5").map(({ value }) => value)).toEqual(["", "high", "extra-high"]);
   });
 
-  it("persists coordinator selection through the controller and keyboard completion", async () => {
+  it("gates an unconfigured AI intent and preserves it when canceling or routing to setup", () => {
+    const requested = reduceNav(initialNavState(), { type: "REQUEST_AI_ACTION", intent: "assisted-authoring" });
+    const cancelled = reduceNav(requested, { type: "CANCEL_AI_GATE" });
+    const configuring = reduceNav(requested, { type: "CONFIGURE_AI_GATE" });
+
+    expect(requested.stack.at(-1)).toEqual({ kind: "ai-gate", intent: "assisted-authoring", focus: 0 });
+    expect(cancelled).toEqual(initialNavState());
+    expect(configuring.stack.at(-1)).toMatchObject({ kind: "coordinator", stage: "provider", returnIntent: "assisted-authoring" });
+    expect(reduceNav(reduceNav(reduceNav(configuring, { type: "SELECT_COORDINATOR_PROVIDER", provider: "openai" }), { type: "SELECT_COORDINATOR_MODEL", model: "gpt-5" }), { type: "SELECT_COORDINATOR_EFFORT", effort: "" }).stack.at(-1)).toEqual({ kind: "coordinator", stage: "settings", focus: 0, returnIntent: "assisted-authoring" });
+    expect(coordinatorStatus()).toEqual({ label: "No configurado", status: "error" });
+    expect(coordinatorStatus({ provider: "openai", model: "gpt-5" })).toEqual({ label: "Configurado", status: "success" });
+  });
+
+  it("maps keyboard selection through coordinator stages and the configuration gate", () => {
+    const submit = { name: "return" } as import("@opencode-ai/plugin/tui").KeyEvent;
+    const providerState: NavState = { stack: [{ kind: "landing", focus: 0 }, { kind: "coordinator", stage: "provider", focus: 1 }], busy: false, closing: false };
+    const gateState: NavState = { stack: [{ kind: "landing", focus: 0 }, { kind: "ai-gate", intent: "assisted-authoring", focus: 1 }], busy: false, closing: false };
+
+    expect(eventForKey(submit, providerState, 0, undefined, { coordinatorOptions: ["openai", "anthropic"] })).toEqual({ type: "SELECT_COORDINATOR_PROVIDER", provider: "anthropic" });
+    expect(eventForKey(submit, gateState)).toEqual({ type: "CANCEL_AI_GATE" });
+  });
+
+  it("persists coordinator selection through the controller and returns to settings", async () => {
     const setCoordinator = vi.fn(async () => undefined);
     const refresh = vi.fn();
     const dispatch = vi.fn();
+    const busy: boolean[] = [];
     const controller = { setCoordinator, refresh } as unknown as import("../src/tui/agent-suite-controller.ts").AgentSuiteController;
 
-    await applyCoordinatorSelection(controller, "openai", "gpt-5", "", dispatch);
-    expect(setCoordinator).toHaveBeenCalledWith({ provider: "openai", model: "gpt-5" });
-    expect(dispatch).toHaveBeenCalledWith({ type: "SELECT_COORDINATOR_EFFORT", effort: "" });
+    await applyCoordinatorSelection(controller, "openai", "gpt-5", "", dispatch, (value) => busy.push(value));
 
+    expect(setCoordinator).toHaveBeenCalledWith({ provider: "openai", model: "gpt-5" });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(dispatch).toHaveBeenCalledWith({ type: "SELECT_COORDINATOR_EFFORT", effort: "" });
+    expect(busy).toEqual([true, false]);
+  });
+
+  it("routes keyboard effort completion through coordinator persistence instead of only changing navigation", async () => {
     const key = { name: "return", preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as import("@opencode-ai/plugin/tui").KeyEvent;
+    const setCoordinator = vi.fn(async () => undefined);
+    const refresh = vi.fn();
+    const dispatch = vi.fn();
+    const setError = vi.fn();
+    const controller = { setCoordinator, refresh } as unknown as import("../src/tui/agent-suite-controller.ts").AgentSuiteController;
     const state: NavState = { stack: [{ kind: "landing", focus: 0 }, { kind: "coordinator", stage: "effort", focus: 0, provider: "openai", model: "gpt-5" }], busy: false, closing: false };
-    await expect(handleCoordinatorSelectionKey(key, { type: "SELECT_COORDINATOR_EFFORT", effort: "high" }, state, controller, dispatch, vi.fn())).resolves.toBe(true);
-    expect(setCoordinator).toHaveBeenLastCalledWith({ provider: "openai", model: "gpt-5", effort: "high" });
-    expect(eventForKey(key, state, 0, undefined, { coordinatorOptions: ["high"] })).toEqual({ type: "SELECT_COORDINATOR_EFFORT", effort: "high" });
-    expect(coordinatorStatus()).toEqual({ label: "No configurado", status: "error" });
+
+    await expect(handleCoordinatorSelectionKey(key, { type: "SELECT_COORDINATOR_EFFORT", effort: "high" }, state, controller, dispatch, setError)).resolves.toBe(true);
+
+    expect(setCoordinator).toHaveBeenCalledWith({ provider: "openai", model: "gpt-5", effort: "high" });
+    expect(dispatch).toHaveBeenCalledWith({ type: "SELECT_COORDINATOR_EFFORT", effort: "high" });
+    expect(setError).toHaveBeenCalledWith(undefined);
+    expect(key.preventDefault).toHaveBeenCalledTimes(1);
   });
 
   it("pushes landing destinations and preserves catalog context on Back", () => {
@@ -135,10 +174,10 @@ describe("Agent Suite navigation", () => {
   });
 
   it("maps every WU1 screen title and bounds catalog rows", () => {
-    const kinds: AppScreen["kind"][] = ["landing", "catalog", "info", "modify", "model", "effort", "delete", "create", "coordinator", "skill-picker"];
+    const kinds: AppScreen["kind"][] = ["landing", "catalog", "info", "modify", "model", "effort", "delete", "create"];
     expect(kinds.map((kind) => screenTitle({ kind } as AppScreen))).toEqual([
       "SUITE DE AGENTES — v1.0.1", "CATALOGO DE AGENTES", "INFO DEL AGENTE", "MODIFICAR AGENTE",
-      "SELECCIONAR EL MODELO DE IA", "SELECCIONAR NIVEL DE ESFUERZO", "ADVERTENCIA", "CREAR AGENTE — v1.0.1", "CONFIGURACIÓN DEL COORDINADOR", "SELECCIONAR SKILLS",
+      "SELECCIONAR EL MODELO DE IA", "SELECCIONAR NIVEL DE ESFUERZO", "ADVERTENCIA", "CREAR AGENTE — v1.0.1",
     ]);
     expect(pageRows(Array.from({ length: 8 }, (_, index) => index), 1)).toEqual([6, 7]);
     expect(MAX_VISIBLE_ROWS).toBe(6);
@@ -180,18 +219,6 @@ describe("Agent Suite navigation", () => {
     expect((skills.stack.at(-1) as any).edit.skills).not.toBe(custom.skills);
   });
 
-  it("keeps draft focus bounded and backs out of nested edits before the screen", () => {
-    const menu = reduceNav(infoState(custom.id), { type: "OPEN_MODIFY", agentId: custom.id, custom: true });
-    const skills = reduceNav(menu, { type: "MODIFY_ACTIVATE", option: "skills", skills: ["testing"] });
-    const moved = reduceNav(reduceNav(skills, { type: "MOVE_FOCUS", delta: 1 }), { type: "MOVE_FOCUS", delta: 1 });
-    const draftBack = reduceNav(moved, { type: "BACK" });
-    const screenBack = reduceNav(draftBack, { type: "BACK" });
-
-    expect((moved.stack.at(-1) as any).edit.focus).toBe(1);
-    expect(draftBack.stack.at(-1)).toMatchObject({ kind: "modify", edit: { mode: "menu" } });
-    expect(screenBack.stack.at(-1)).toMatchObject({ kind: "info", agentId: custom.id });
-  });
-
   it("opens a searchable installed-skill picker and returns its selected assignment to the skills draft", () => {
     const menu = reduceNav(infoState(custom.id), { type: "OPEN_MODIFY", agentId: custom.id, custom: true });
     const skills = reduceNav(menu, { type: "MODIFY_ACTIVATE", option: "skills", skills: ["testing"] });
@@ -203,6 +230,18 @@ describe("Agent Suite navigation", () => {
     expect(searching.stack.at(-1)).toMatchObject({ kind: "skill-picker", query: "hub" });
     expect(skillPickerRows((searching.stack.at(-1) as any).installed, "hub", ["testing"])).toEqual([{ id: "github", label: "GitHub", description: "Git hosting", attached: false }]);
     expect(attached.stack.at(-1)).toMatchObject({ kind: "modify", agentId: custom.id, edit: { mode: "skills", skills: ["testing", "github"] } });
+  });
+
+  it("keeps draft focus bounded and backs out of nested edits before the screen", () => {
+    const menu = reduceNav(infoState(custom.id), { type: "OPEN_MODIFY", agentId: custom.id, custom: true });
+    const skills = reduceNav(menu, { type: "MODIFY_ACTIVATE", option: "skills", skills: ["testing"] });
+    const moved = reduceNav(reduceNav(skills, { type: "MOVE_FOCUS", delta: 1 }), { type: "MOVE_FOCUS", delta: 1 });
+    const draftBack = reduceNav(moved, { type: "BACK" });
+    const screenBack = reduceNav(draftBack, { type: "BACK" });
+
+    expect((moved.stack.at(-1) as any).edit.focus).toBe(1);
+    expect(draftBack.stack.at(-1)).toMatchObject({ kind: "modify", edit: { mode: "menu" } });
+    expect(screenBack.stack.at(-1)).toMatchObject({ kind: "info", agentId: custom.id });
   });
 });
 
