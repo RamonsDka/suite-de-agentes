@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { mountAgentSuite, type DialogMountApi } from "../src/tui/agent-suite-mount.tsx";
+import { handleAgentSuiteEscape, mountAgentSuite, registerAgentSuiteEscapeHandler, SUITE_DIALOG_SIZE, type DialogMountApi } from "../src/tui/agent-suite-mount.tsx";
 import { createAgentSuiteController } from "../src/tui/agent-suite-controller.ts";
 import { openAgentSuite, tui } from "../src/tui/index.tsx";
+import { SUITE_SHELL_LAYOUT } from "../src/tui/screens/suite-shell.tsx";
 
 describe("Agent Suite dialog mount", () => {
   it("replaces once, never clears during navigation, and clears once on close", () => {
@@ -40,5 +41,42 @@ describe("Agent Suite dialog mount", () => {
     mounted.requestClose();
     expect(mounted.isClosing()).toBe(true);
     expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses a host-compatible dialog size and bounds the shell geometry", () => {
+    const api: DialogMountApi = {
+      theme: {} as never,
+      ui: {
+        Dialog: () => null,
+        dialog: {
+          replace: vi.fn(),
+          clear: vi.fn(),
+        },
+      },
+    };
+
+    mountAgentSuite(api, createAgentSuiteController());
+
+    expect(SUITE_DIALOG_SIZE).toBe("medium");
+    expect(SUITE_SHELL_LAYOUT).toMatchObject({ width: "100%", maxWidth: "100%", maxHeight: "100%", flexShrink: 1, overflow: "hidden" });
+  });
+
+  it("exposes an active nested Escape handler to the host keymap path", () => {
+    const clear = vi.fn();
+    const api: DialogMountApi = {
+      theme: {} as never,
+      ui: {
+        Dialog: () => null,
+        dialog: { replace: vi.fn(), clear },
+      },
+    };
+    const mounted = mountAgentSuite(api, createAgentSuiteController());
+    const unregister = registerAgentSuiteEscapeHandler(() => true);
+
+    expect(handleAgentSuiteEscape()).toBe(true);
+    unregister();
+    expect(handleAgentSuiteEscape()).toBe(false);
+    mounted.requestClose();
+    expect(handleAgentSuiteEscape()).toBe(false);
   });
 });

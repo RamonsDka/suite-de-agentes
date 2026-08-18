@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { KeyEvent } from "@opencode-ai/plugin/tui";
 import { reduceNav, type NavState } from "../src/tui/agent-suite-nav.ts";
-import { applyInlineEdit, eventForKey, handleInlineEditKey } from "../src/tui/agent-suite-app.tsx";
+import { applyInlineEdit, eventForKey, handleInlineEditKey, handleNestedScreenEscape } from "../src/tui/agent-suite-app.tsx";
 import type { AgentSuiteController } from "../src/tui/agent-suite-controller.ts";
 import { modifyOptions } from "../src/tui/agent-suite-vm.ts";
 
@@ -135,5 +135,15 @@ describe("Agent Suite inline editing", () => {
     expect(eventForKey(keyEvent("f10").key, state)).toEqual({ type: "REQUEST_CLOSE" });
     expect(eventForKey(keyEvent("return").key, state)).toBeUndefined();
     expect(eventForKey(keyEvent("linefeed").key, state)).toBeUndefined();
+  });
+
+  it("walks nested Escape through the internal stack without closing the host", () => {
+    const dispatch = vi.fn();
+    expect(handleNestedScreenEscape(menuState, dispatch)).toBe(true);
+    expect(dispatch).toHaveBeenCalledWith({ type: "BACK" });
+
+    const landing: NavState = { stack: [{ kind: "landing", focus: 0 }], busy: false, closing: false };
+    expect(handleNestedScreenEscape(landing, dispatch)).toBe(false);
+    expect(dispatch).toHaveBeenCalledTimes(1);
   });
 });

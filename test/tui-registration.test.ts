@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import plugin, {
   AGENT_SUITE_COMMAND,
+  AGENT_SUITE_ESCAPE_COMMAND,
   AGENT_SUITE_KEY,
   openAgentSuite,
   registerSuiteKeymap,
@@ -12,6 +13,7 @@ import plugin, {
   tui,
 } from "../src/tui/index.tsx";
 import { PLUGIN_VERSION } from "../src/version.ts";
+import { registerAgentSuiteEscapeHandler } from "../src/tui/agent-suite-mount.tsx";
 
 function registrationHost() {
   const disposers = {
@@ -49,12 +51,35 @@ describe("Agent Suite WU1 registration", () => {
     const host = registrationHost();
     const open = vi.fn();
     expect(registerSuiteKeymap(host.api, open)).toBe(true);
-    expect(host.layer.bindings).toEqual([{ key: AGENT_SUITE_KEY, cmd: AGENT_SUITE_COMMAND }]);
-    expect(host.layer.commands).toHaveLength(1);
+    expect(host.layer.bindings).toEqual([
+      { key: AGENT_SUITE_KEY, cmd: AGENT_SUITE_COMMAND },
+      { key: "escape", cmd: AGENT_SUITE_ESCAPE_COMMAND },
+    ]);
+    expect(host.layer.commands).toHaveLength(2);
     expect(host.layer.commands[0].run()).toBe(true);
     expect(registerSuiteSlashCommand(host.api, open)).toBe(true);
     host.slash[0].onSelect();
     expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it("consumes nested Escape through the keymap layer and leaves landing Escape to the host", () => {
+    const host = registrationHost();
+    const open = vi.fn();
+    expect(registerSuiteKeymap(host.api, open)).toBe(true);
+    const escape = host.layer.commands.find((command: any) => command.name === AGENT_SUITE_ESCAPE_COMMAND);
+    const binding = host.layer.bindings.find((item: any) => item.key === "escape");
+
+    expect(binding).toMatchObject({ key: "escape", cmd: AGENT_SUITE_ESCAPE_COMMAND });
+    expect(binding.preventDefault).not.toBe(false);
+    expect(escape?.run({ event: { preventDefault: vi.fn(), stopPropagation: vi.fn() } })).toBe(false);
+
+    const preventDefault = vi.fn();
+    const stopPropagation = vi.fn();
+    const unregister = registerAgentSuiteEscapeHandler(() => true);
+    expect(escape?.run({ event: { preventDefault, stopPropagation } })).toBe(true);
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+    unregister();
   });
 
   it("opens the custom Dialog through one replace and does not expose route APIs", () => {

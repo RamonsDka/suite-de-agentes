@@ -7,9 +7,10 @@ import { validateVariantId } from "../core/config.ts";
 import { PLUGIN_VERSION } from "../version.ts";
 import { safeHostAction, safeSlotRender } from "./host-compat.ts";
 import { createAgentSuiteController, type AgentSuiteController } from "./agent-suite-controller.ts";
-import { mountAgentSuite } from "./agent-suite-mount.tsx";
+import { handleAgentSuiteEscape, mountAgentSuite } from "./agent-suite-mount.tsx";
 
 export const AGENT_SUITE_COMMAND = ":agent-suite";
+export const AGENT_SUITE_ESCAPE_COMMAND = "agent-suite.escape";
 export const AGENT_SUITE_KEY = "alt+s";
 
 export function suiteTitle(): string {
@@ -117,8 +118,22 @@ function registerKeymapLayer(api: RegistrationApi, open: () => void): (() => voi
       category: "Agentes",
       nargs: "0",
       run: () => { open(); return true; },
+    }, {
+      name: AGENT_SUITE_ESCAPE_COMMAND,
+      title: "Suite de Agentes Back",
+      desc: "Vuelve dentro de Suite de Agentes",
+      category: "Agentes",
+      run: ({ event }: { event: { preventDefault(): void; stopPropagation(): void } }) => {
+        if (!handleAgentSuiteEscape()) return false;
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+      },
     }],
-    bindings: [{ key: AGENT_SUITE_KEY, cmd: AGENT_SUITE_COMMAND }],
+    bindings: [
+      { key: AGENT_SUITE_KEY, cmd: AGENT_SUITE_COMMAND },
+      { key: "escape", cmd: AGENT_SUITE_ESCAPE_COMMAND },
+    ],
   }), false);
 }
 

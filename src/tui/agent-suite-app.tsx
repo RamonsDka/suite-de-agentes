@@ -1,4 +1,4 @@
-import { createSignal, type JSX } from "solid-js";
+import { createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import { useKeyboard } from "@opentui/solid";
 import type { KeyEvent } from "@opencode-ai/plugin/tui";
 import type { MouseEvent } from "@opentui/core";
@@ -23,6 +23,7 @@ export interface AgentSuiteAppProps {
   theme: TuiTheme;
   controller: AgentSuiteController;
   onClose: () => void;
+  registerEscapeHandler?: (handler: () => boolean) => () => void;
   modelOptions?: (row: import("../core/types.ts").AgentCatalogRow) => readonly TuiDialogSelectOption<string>[];
   variantOptions?: (row: import("../core/types.ts").AgentCatalogRow, model: string) => readonly TuiDialogSelectOption<string>[];
 }
@@ -32,6 +33,13 @@ export function dispatchMouse(event: MouseEvent, action: () => void): boolean {
   event.preventDefault();
   event.stopPropagation();
   action();
+  return true;
+}
+
+export function handleNestedScreenEscape(state: NavState, dispatch: (event: NavEvent) => void): boolean {
+  const screen = state.stack.at(-1);
+  if (!screen || state.closing || screen.kind === "landing") return false;
+  dispatch({ type: "BACK" });
   return true;
 }
 
@@ -167,6 +175,13 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
     void applyCreateSubmission(props.controller, draft, dispatch).then((error) => setOperationError(error)).finally(() => setBusy(false));
   };
   const advanceCreate = (current: Extract<AppScreen, { kind: "create" }>) => setOperationError(advanceCreateDraft(current.draft, current.step, dispatch));
+  const handleNestedEscape = () => {
+    return handleNestedScreenEscape(state(), dispatch);
+  };
+  onMount(() => {
+    const unregister = props.registerEscapeHandler?.(handleNestedEscape);
+    onCleanup(() => unregister?.());
+  });
   useKeyboard((key) => {
     const current = state().stack.at(-1);
     if (current?.kind === "modify" && current.edit.mode === "skills") {
