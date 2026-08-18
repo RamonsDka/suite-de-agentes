@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { initialNavState, reduceNav, type NavState } from "../src/tui/agent-suite-nav.ts";
 import { eventForKey } from "../src/tui/agent-suite-app.tsx";
-import { ModifyPanel, editorMenuRows, modifyMenuRows, modifyOptionKey, validateSkillInput } from "../src/tui/screens/modify-panel.tsx";
+import { ModifyPanel, editorMenuRows, modifyFinalizationStatus, modifyMenuRows, modifyOptionKey, validateSkillInput } from "../src/tui/screens/modify-panel.tsx";
 import { modifyOptions } from "../src/tui/agent-suite-vm.ts";
+import { screenKeyHintsForScreen } from "../src/tui/visual-primitives.tsx";
 
 const seed = { id: "general", membership: "seed" as const, enabled: true, skills: [], consent: "explicit-current-turn" as const };
 const custom = { ...seed, id: "custom", membership: "custom" as const, skills: ["testing"] };
@@ -106,5 +107,16 @@ describe("Agent Suite modify panel", () => {
     expect(returned.stack.at(-1)).toMatchObject({ kind: "effort", agentId: custom.id });
     expect(effortReturned.stack.at(-1)).toMatchObject({ kind: "modify", agentId: custom.id, edit: { mode: "menu" } });
     expect(infoAgain.stack.at(-1)).toMatchObject({ kind: "info", agentId: custom.id });
+  });
+
+  it("exposes Finalizar only from a saved modify menu and routes F10 through validated finalization", () => {
+    const menu = reduceNav(info(custom.id), { type: "OPEN_MODIFY", agentId: custom.id, custom: true });
+    const editing = reduceNav(menu, { type: "MODIFY_ACTIVATE", option: "description", value: "Draft" });
+
+    expect(modifyFinalizationStatus({ mode: "menu" })).toEqual({ label: "Cambios guardados", status: "success" });
+    expect(modifyFinalizationStatus({ mode: "text", field: "description", value: "Draft" })).toEqual({ label: "Edición pendiente", status: "warning" });
+    expect(eventForKey({ name: "f10" } as never, menu, 0, undefined, { modifyOptionCount: 7, isCustom: true })).toEqual({ type: "FINALIZE_MODIFY" });
+    expect(eventForKey({ name: "f10" } as never, editing, 0, undefined, { modifyOptionCount: 7, isCustom: true })).toBeUndefined();
+    expect(screenKeyHintsForScreen(menu.stack.at(-1)!)).toContain("Finalizar");
   });
 });
