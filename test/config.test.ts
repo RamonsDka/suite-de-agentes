@@ -64,6 +64,19 @@ describe("suite config", () => {
     expect(config).toEqual(before);
   });
 
+  it("rejects patch IDs reserved by either assignment map", () => {
+    const config = parseSuiteConfig({
+      version: 1,
+      customAgents: { "local-helper": customAgent },
+      modelAssignments: { "model-reserved": "openai/reserved" },
+      variantAssignments: { "variant-reserved": "high" },
+    });
+
+    expect(() => patchCustomAgent(config, "local-helper", { newId: "model-reserved" })).toThrow(/collision|colisi[oó]n|assignment|asignaci[oó]n/i);
+    expect(() => patchCustomAgent(config, "local-helper", { newId: "variant-reserved" })).toThrow(/collision|colisi[oó]n|assignment|asignaci[oó]n/i);
+    expect(config.customAgents["local-helper"]).toEqual(customAgent);
+  });
+
   it("validates skill IDs using the same safe slug rules", () => {
     expect(validateSkillId("testing")).toBe("testing");
     expect(validateSkillId("linting-tools")).toBe("linting-tools");
@@ -151,5 +164,45 @@ describe("suite config", () => {
       suites: { default: { agents: {} } },
       customAgents: {},
     })).toEqual({ version: 1, customAgents: {}, modelAssignments: {}, variantAssignments: {} });
+  });
+
+  it("normalizes validated base overrides and disabled agent ids without changing legacy output", () => {
+    expect(parseSuiteConfig({
+      version: 1,
+      customAgents: { "local-helper": customAgent },
+      modelAssignments: { general: "openai/assigned" },
+      variantAssignments: { general: "high" },
+      baseOverrides: {
+        general: { description: "A safer general agent", skills: ["testing"], operations: "Use the requested tools." },
+      },
+      disabledAgents: ["general", "general"],
+    })).toEqual({
+      version: 1,
+      customAgents: { "local-helper": customAgent },
+      modelAssignments: { general: "openai/assigned" },
+      variantAssignments: { general: "high" },
+      baseOverrides: {
+        general: { description: "A safer general agent", skills: ["testing"], operations: "Use the requested tools." },
+      },
+      disabledAgents: ["general"],
+    });
+  });
+
+  it("validates override ownership and rejects prototype-pollution keys", () => {
+    expect(() => parseSuiteConfig({
+      version: 1,
+      customAgents: { "local-helper": customAgent },
+      baseOverrides: { "local-helper": { description: "not a base agent" } },
+    })).toThrow(/base|seed|sistema|agent/i);
+    expect(() => parseSuiteConfig({
+      version: 1,
+      customAgents: {},
+      disabledAgents: ["__proto__"],
+    })).toThrow(/id|identificador|invalid/i);
+    expect(() => parseSuiteConfig({
+      version: 1,
+      customAgents: {},
+      baseOverrides: { general: { skills: ["bad value"] } },
+    })).toThrow(/skill|habilidad|invalid/i);
   });
 });

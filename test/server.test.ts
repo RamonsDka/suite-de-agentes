@@ -197,6 +197,7 @@ describe("server adapter", () => {
         },
       });
       const config = {
+        permission: {},
         model: "openai/root-model",
         agent: {
           general: { model: "openai/old-general", variant: "old" },
@@ -221,5 +222,48 @@ describe("server adapter", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it("removes disabled agents from runtime config and applies safe base overrides", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agent-suite-runtime-disabled-"));
+    vi.stubEnv("HOME", home);
+    vi.stubEnv("USERPROFILE", home);
+    try {
+      saveSuiteConfig(defaultSuitePath(), {
+        version: 1,
+        customAgents: {},
+        modelAssignments: { "agent-especialit-github": "openai/assigned-github" },
+        variantAssignments: { "agent-especialit-github": "high" },
+        baseOverrides: { "agent-especialit-github": { description: "Edited GitHub", skills: ["testing"], operations: "Use GitHub safely." } },
+        disabledAgents: ["general"],
+      });
+      const config = {
+        permission: {},
+        agent: {
+          general: { model: "openai/general", description: "General" },
+          "agent-especialit-github": { model: "openai/old-github", description: "Old GitHub", prompt: "Old prompt" },
+        },
+      };
+      const hooks = await serverPlugin({} as never);
+      await hooks.config?.(config as never);
+
+      expect(config.agent.general).toBeUndefined();
+      expect(config.agent["agent-especialit-github"]).toMatchObject({ model: "openai/assigned-github", variant: "high", description: "Edited GitHub", prompt: "Use GitHub safely.", skills: ["testing"] });
+      expect((config.permission as { task?: Record<string, string> }).task?.general).toBe("deny");
+
+      await hooks["chat.message"]?.({ sessionID: "disabled", agent: "gentle-orchestrator", messageID: "m1" }, {
+        message: { id: "m1", agent: "gentle-orchestrator" } as never,
+        parts: [{ type: "text", text: "usa también agente: general" }] as never,
+      });
+      await expect(hooks["tool.execute.before"]?.({ tool: "task", sessionID: "disabled", callID: "c1" }, { args: { subagent_type: "general" } })).rejects.toThrow(/disabled|desactiv/i);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("rejects explicit current-turn grants for a disabled target even when the ledger contains one", async () => {
+    const hooks = createAgentSuiteServer({ knownAgents: () => ["general"], disabledAgents: () => ["general"] });
+    await hooks["chat.message"]({ sessionID: "s", agent: "gentle-orchestrator", messageID: "m1" }, { message: { id: "m1", agent: "gentle-orchestrator" } as never, parts: [{ type: "text", text: "usa también agente: general" }] as never });
+    await expect(hooks["tool.execute.before"]({ tool: "task", sessionID: "s", callID: "c1" }, { args: { subagent_type: "general" } })).rejects.toThrow(/disabled|desactiv/i);
   });
 });
