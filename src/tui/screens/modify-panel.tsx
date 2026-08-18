@@ -136,7 +136,6 @@ export function ModifyPanel(props: ModifyPanelProps): JSX.Element {
          props.onSkillAdd?.(submitted);
        }} /> : null}
       </SectionPanel>
-      <StatusBadge theme={props.theme} status={modifyFinalizationStatus(edit()).status}>{modifyFinalizationStatus(edit()).label}</StatusBadge>
       {props.busy ? <StatusBadge theme={props.theme} status="info">Guardando cambios…</StatusBadge> : null}
       {props.error ? <StatusBadge theme={props.theme} status="error">{props.error}</StatusBadge> : null}
     </box>
@@ -169,6 +168,7 @@ export function ModifyPanel(props: ModifyPanelProps): JSX.Element {
       <SectionPanel theme={props.theme} title="Modificar agente">
        {editorMenuRows(props.row, props.operations ?? "", props.focus, props.protectedBase === true).map((row) => <SelectableRow theme={props.theme} selected={row.selected} onActivate={() => props.onActivate(row.field)}>{row.label}{row.value ? `: ${truncate(row.value, 72)}` : ""}</SelectableRow>)}
       </SectionPanel>
+      <StatusBadge theme={props.theme} status={modifyFinalizationStatus(edit()).status}>{modifyFinalizationStatus(edit()).label}</StatusBadge>
       {props.busy ? <StatusBadge theme={props.theme} status="info">Guardando cambios…</StatusBadge> : null}
       {props.error ? <StatusBadge theme={props.theme} status="error">{props.error}</StatusBadge> : null}
     </box>

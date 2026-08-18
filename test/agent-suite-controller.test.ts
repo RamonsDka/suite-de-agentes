@@ -54,8 +54,10 @@ describe("Agent Suite controller adapter", () => {
 
     expect(controller.coordinator?.()).toBeUndefined();
     await controller.setCoordinator?.({ provider: "openai", model: "gpt-5", effort: "extra-high" });
+
     expect(controller.coordinator?.()).toEqual({ provider: "openai", model: "gpt-5", effort: "extra-high" });
     expect(loadSuiteConfig(path).coordinator).toEqual({ provider: "openai", model: "gpt-5", effort: "extra-high" });
+    expect(createAgentSuiteController([], "1.0.1", { path, runtime: {} }).coordinator?.()).toEqual({ provider: "openai", model: "gpt-5", effort: "extra-high" });
   });
 
   it("commits a custom patch, persists it, migrates its materialized file, and rebuilds", async () => {
