@@ -45,7 +45,7 @@ Chain strategy: stacked-to-main
 ## P1b: Deployed-Runtime Smoke Gate (MANDATORY before final verify/archive)
 
 - [ ] SMOKE.1 80x24 Alt+S on first external dist/server.js: one dialog, Esc closes once, caller route preserved, no clip/ghost
-- [ ] SMOKE.2 Max-height: 7 screens + modify no clip
+- [x] SMOKE.2 Max-height: 7 screens + modify no clip — deployed OpenCode 1.18.18 PASS after P1c (240x60; seven screens + modify, nested Esc, exact 3/5 options, Skills/Operaciones inline, warning/create, bounded frame)
 - [ ] SMOKE.G Dispatcher gate: SMOKE.1+SMOKE.2 PASS before verify/archive; no completion until both pass
 
 ## P2: Catálogo+Info (WU2)
@@ -72,3 +72,9 @@ Chain strategy: stacked-to-main
 - [x] 4.5 GREEN complete `controller.ts` — busy/error/refresh; core untouched
 - [x] 4.6 REFACTOR no native mid-flow; Enter→Input; theme reactive
 - [x] 4.7 Deployed-smoke linkage/deferral recorded only; runtime not claimed. SMOKE.1/SMOKE.2/SMOKE.G remain pending.
+
+## P1c: Deployed-Runtime Critical Corrections (forced chained slice)
+
+- [x] FIX.1 RED/GREEN layout regression coverage and host-compatible bounded dialog correction for 80x24 and 240x60 geometry.
+- [x] FIX.2 RED/GREEN nested Escape regression coverage and host keymap-layer Back interception; landing Escape remains host close.
+- [x] FIX.G Focused tests, full source tests, typecheck, and Bun/OpenTUI geometry harness pass; deployed SMOKE.1/SMOKE.2/SMOKE.G remain unchecked until fresh external dist smoke.

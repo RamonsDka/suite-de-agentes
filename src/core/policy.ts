@@ -37,17 +37,19 @@ export function isAuthorizedInternalAgent(target: string): boolean {
   return (INTERNAL_AGENT_ALLOWLIST as readonly string[]).includes(target);
 }
 
-export function decideTaskGate(input: TaskGateInput): TaskGateDecision {
+export function decideTaskGate(input: TaskGateInput & { disabledAgents?: readonly string[] }): TaskGateDecision {
+  if (input.disabledAgents?.includes(input.target)) return { allowed: false, reason: `Disabled agent '${input.target}' cannot be dispatched.` };
   if (input.sessionAgent !== SDD_ORCHESTRATOR) return { allowed: true, reason: "suite policy is scoped to gentle-orchestrator" };
   if (isAuthorizedInternalAgent(input.target)) return { allowed: true, reason: "exact internal allowlist" };
   if (input.ledger?.has(input.sessionID, input.messageID, input.target)) return { allowed: true, reason: "explicit current-message grant" };
   return { allowed: false, reason: `Blocked agent '${input.target}'. Add exactly 'usa también agente: ${input.target}' to the current message.` };
 }
 
-export function transformTaskPermission(): Record<string, PermissionValue> {
+export function transformTaskPermission(disabledAgents: readonly string[] = []): Record<string, PermissionValue> {
+  const disabled = new Set(disabledAgents);
   return {
     "*": "deny",
-    ...Object.fromEntries(INTERNAL_AGENT_ALLOWLIST.map((agent): [string, PermissionValue] => [agent, agent.endsWith("-fallback") ? "ask" : "allow"])),
+    ...Object.fromEntries(INTERNAL_AGENT_ALLOWLIST.filter((agent) => !disabled.has(agent)).map((agent): [string, PermissionValue] => [agent, agent.endsWith("-fallback") ? "ask" : "allow"])),
     "general": "deny",
   };
 }
