@@ -42,6 +42,20 @@ describe("visual tokens", () => {
     expect(status.status.error.equals(statusCurrent.primary)).toBe(true);
   });
 
+  it("exposes semantic yellow completion, blue form, and translucent search tokens", () => {
+    const current = theme();
+    const tokens = createVisualTokens(current);
+
+    expect(tokens.action.finalize).toBe(current.warning);
+    expect(tokens.form.label).toBe(current.primary);
+    expect(tokens.form.value).toBe(current.text);
+    expect(tokens.search.background.r).toBe(current.primary.r);
+    expect(tokens.search.background.g).toBe(current.primary.g);
+    expect(tokens.search.background.b).toBe(current.primary.b);
+    expect(tokens.search.background.a).toBeLessThan(1);
+    expect(tokens.search.focus).toBe(current.primary);
+  });
+
   it("formats blank, normal, and long catalog names", () => {
     expect(formatCatalogName("")).toBe("(sin nombre)");
     expect(formatCatalogName("Agente de pruebas")).toBe("Agente de pruebas");

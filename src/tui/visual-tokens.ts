@@ -1,4 +1,4 @@
-import type { RGBA } from "@opentui/core";
+import { RGBA } from "@opentui/core";
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui";
 
 type VisualColor = RGBA;
@@ -8,6 +8,9 @@ export interface VisualTokens {
   indicator: VisualColor;
   status: Record<"success" | "warning" | "error" | "info", VisualColor>;
   surface: { panel: VisualColor; element: VisualColor; border: VisualColor; text: VisualColor; mutedText: VisualColor };
+  action: { finalize: VisualColor };
+  form: { label: VisualColor; value: VisualColor };
+  search: { background: VisualColor; focus: VisualColor };
 }
 
 export function formatCatalogName(value: string, maxLength = 40): string {
@@ -34,5 +37,8 @@ export function createVisualTokens(current: TuiThemeCurrent): VisualTokens {
     indicator,
     status: { success: status(current.success), warning: status(current.warning), error: status(current.error), info: status(current.info) },
     surface: { panel: current.backgroundPanel, element: current.backgroundElement, border: current.border, text: current.text, mutedText: current.textMuted },
+    action: { finalize: current.warning },
+    form: { label: current.primary, value: current.text },
+    search: { background: RGBA.fromValues(current.primary.r, current.primary.g, current.primary.b, 0.35), focus: current.primary },
   };
 }

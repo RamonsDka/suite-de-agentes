@@ -49,6 +49,26 @@ describe("namespace persistence", () => {
     expect(readFileSync(path, "utf8")).not.toContain("suites");
   });
 
+  it("round-trips a coordinator and preserves prior bytes when its validation fails", () => {
+    const path = suitePath();
+    const existing = { version: 1 as const, customAgents: {}, modelAssignments: {}, variantAssignments: {} };
+    saveSuiteConfig(path, existing);
+    const savedBytes = readFileSync(path, "utf8");
+
+    expect(() => saveSuiteConfig(path, {
+      ...existing,
+      coordinator: { provider: "", model: "claude-sonnet-4-5" },
+    })).toThrow(/coordinator/i);
+    expect(readFileSync(path, "utf8")).toBe(savedBytes);
+
+    const configured = {
+      ...existing,
+      coordinator: { provider: "anthropic", model: "claude-sonnet-4-5", effort: "extra-high" },
+    };
+    saveSuiteConfig(path, configured);
+    expect(loadSuiteConfig(path)).toEqual(configured);
+  });
+
   it("preserves persisted bytes after invalid save and rejected legacy load", () => {
     const path = suitePath();
     const value = { version: 1 as const, customAgents: { "local-helper": customAgent }, modelAssignments: {}, variantAssignments: {} };

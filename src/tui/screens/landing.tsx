@@ -1,27 +1,32 @@
 import type { JSX } from "@opentui/solid";
 import type { TuiTheme } from "@opencode-ai/plugin/tui";
 import type { MouseEvent } from "@opentui/core";
+import type { CoordinatorConfig } from "../../core/types.ts";
+import { coordinatorStatus } from "./coordinator-config.tsx";
 import { SelectableRow } from "../visual-primitives.tsx";
 
 export interface LandingProps {
   theme: TuiTheme;
-  focus: 0 | 1;
-  onActivate: (index: 0 | 1) => void;
+  focus: 0 | 1 | 2;
+  coordinator?: CoordinatorConfig;
+  onActivate: (index: 0 | 1 | 2) => void;
 }
 
 export interface LandingRow {
   label: string;
   selected: boolean;
+  status?: string;
 }
 
-export function landingRows(focus: 0 | 1): readonly LandingRow[] {
+export function landingRows(focus: 0 | 1 | 2, coordinator?: CoordinatorConfig): readonly LandingRow[] {
   return [
-    { label: "CATALOGO", selected: focus === 0 },
-    { label: "CREAR AGENTE", selected: focus === 1 },
+    { label: "Catálogo", selected: focus === 0 },
+    { label: "Crear agente", selected: focus === 1 },
+    { label: "⚙ Configuración", selected: focus === 2, status: coordinatorStatus(coordinator).label },
   ];
 }
 
-export function landingMouseActivation(event: MouseEvent, index: 0 | 1, activate: (index: 0 | 1) => void): boolean {
+export function landingMouseActivation(event: MouseEvent, index: 0 | 1 | 2, activate: (index: 0 | 1 | 2) => void): boolean {
   if (event.button !== 0) return false;
   event.preventDefault();
   event.stopPropagation();
@@ -31,13 +36,13 @@ export function landingMouseActivation(event: MouseEvent, index: 0 | 1, activate
 
 export function Landing(props: LandingProps): JSX.Element {
   const item = (row: LandingRow, index: number) => (
-      <SelectableRow theme={props.theme} selected={row.selected} onActivate={() => props.onActivate(index as 0 | 1)}>
-      {row.label}
+      <SelectableRow theme={props.theme} selected={row.selected} status={row.status === "Configurado" ? "success" : row.status === "No configurado" ? "error" : undefined} onActivate={() => props.onActivate(index as 0 | 1 | 2)}>
+      {row.label}{row.status ? ` · ${row.status}` : ""}
     </SelectableRow>
   );
   return (
     <box flexDirection="column" gap={1}>
-      {landingRows(props.focus).map(item)}
+      {landingRows(props.focus, props.coordinator).map(item)}
     </box>
   );
 }

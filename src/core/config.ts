@@ -1,4 +1,4 @@
-import type { BaseAgentOverride, CustomAgent, SuiteConfig } from "./types.ts";
+import type { BaseAgentOverride, CoordinatorConfig, CustomAgent, SuiteConfig } from "./types.ts";
 import { SUITE_DE_AGENTES_SEED } from "./suites.ts";
 
 const ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
@@ -34,6 +34,23 @@ export function validateVariantId(value: string): string {
   const variant = typeof value === "string" ? value : "";
   if (!VARIANT.test(variant)) throw new Error("Invalid variant id: use a non-empty safe key without whitespace or path separators");
   return variant;
+}
+
+function validateCoordinatorConfig(value: unknown): CoordinatorConfig {
+  const coordinator = safeRecord(value, "coordinator");
+  for (const key of Object.keys(coordinator)) if (!["provider", "model", "effort"].includes(key)) throw new Error(`Invalid coordinator configuration field: ${key}`);
+  const provider = typeof coordinator.provider === "string" ? coordinator.provider : "";
+  const model = typeof coordinator.model === "string" ? coordinator.model : "";
+  try {
+    const parsed: CoordinatorConfig = {
+      provider: validateVariantId(provider),
+      model: validateVariantId(model),
+    };
+    if (coordinator.effort !== undefined) parsed.effort = validateVariantId(coordinator.effort as string);
+    return parsed;
+  } catch {
+    throw new Error("Invalid coordinator configuration");
+  }
 }
 
 export function validateSkillId(value: string): string {
@@ -108,7 +125,7 @@ export function parseSuiteConfig(value: unknown): SuiteConfig {
   const root = safeRecord(value, "Suite config");
   if (root.version !== 1) throw new Error("Invalid suite config version");
   for (const key of Object.keys(root)) {
-    if (["version", "customAgents", "modelAssignments", "variantAssignments", "activeSuite", "suites", "baseOverrides", "disabledAgents"].includes(key)) continue;
+    if (["version", "customAgents", "modelAssignments", "variantAssignments", "activeSuite", "suites", "baseOverrides", "disabledAgents", "coordinator"].includes(key)) continue;
     if (/profile|suite/i.test(key)) throw new Error(`La configuración de suites/perfiles no es compatible: ${key}`);
     throw new Error(`Unknown suite config field: ${key}`);
   }
@@ -187,6 +204,7 @@ export function parseSuiteConfig(value: unknown): SuiteConfig {
   const result: SuiteConfig = { version: 1, customAgents, modelAssignments, variantAssignments };
   if (hasBaseOverrides) result.baseOverrides = baseOverrides;
   if (hasDisabledAgents) result.disabledAgents = disabledAgents;
+  if (root.coordinator !== undefined) result.coordinator = validateCoordinatorConfig(root.coordinator);
   return result;
 }
 
