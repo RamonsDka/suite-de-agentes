@@ -131,7 +131,7 @@ describe("Agent Suite controller adapter", () => {
     const before = readFileSync(path, "utf8");
     const controller = createAgentSuiteController([], "1.0.1", { path, home, runtime: { "old-agent": { model: agent.model } } });
 
-    await expect(controller.patchAgent!("old-agent", { newId: "reserved-agent" })).rejects.toThrow(/collision|colisi[oó]n/i);
+    await expect(controller.patchAgent("old-agent", { newId: "reserved-agent" })).rejects.toThrow(/collision|colisi[oó]n/i);
 
     expect(readFileSync(path, "utf8")).toBe(before);
     expect(existsSync(globalAgentPath("old-agent", home))).toBe(true);
@@ -151,12 +151,12 @@ describe("Agent Suite controller adapter", () => {
       runtime: { general: { model: "openai/runtime", variant: "runtime", description: "Runtime" } },
     });
 
-    await controller.patchAgent!("general", { description: "Edited base", skills: ["testing"], operations: "Operate safely." });
+    await controller.patchAgent("general", { description: "Edited base", skills: ["testing"], operations: "Operate safely." });
 
     const general = controller.snapshot().rows.find((item) => item.id === "general");
     expect(general).toMatchObject({ id: "general", description: "Edited base", skills: ["testing"], model: "openai/assigned", variant: "high" });
     expect(controller.operations?.("general")).toBe("Operate safely.");
-    await expect(controller.patchAgent!("general", { newId: "renamed-general" })).rejects.toThrow(/protected|proteg|rename|renombr/i);
+    await expect(controller.patchAgent("general", { newId: "renamed-general" })).rejects.toThrow(/protected|proteg|rename|renombr/i);
     expect(controller.snapshot().rows.some((item) => item.id === "renamed-general")).toBe(false);
   });
 
