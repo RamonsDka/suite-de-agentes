@@ -1,4 +1,5 @@
 import type { AgentCatalogRow } from "../core/types.ts";
+import type { SkillCandidate } from "../core/skill-catalog.ts";
 import { editorFields } from "./agent-suite-vm.ts";
 
 export type ModifyEdit =
@@ -16,15 +17,22 @@ export type CreateDraft = {
   effort: string;
 };
 
+export type CoordinatorStage = "settings" | "provider" | "model" | "effort";
+export type AiIntent = "assisted-authoring";
+
 export type AppScreen =
-  | { kind: "landing"; focus: 0 | 1 }
+  | { kind: "landing"; focus: 0 | 1 | 2 }
   | { kind: "catalog"; page: number; focus: number; query: string; searchFocused: boolean }
   | { kind: "info"; agentId: string; focus: number }
   | { kind: "model"; agentId: string; focus: number }
   | { kind: "effort"; agentId: string; focus: number }
   | { kind: "modify"; agentId: string; focus: number; edit: ModifyEdit; editable?: boolean; protectedBase?: boolean }
   | { kind: "delete"; agentId: string; confirmFocus: 0 | 1 }
-  | { kind: "create"; step: 0 | 1 | 2 | 3 | 4 | 5; draft: CreateDraft; focus: number };
+  | { kind: "create"; step: 0 | 1 | 2 | 3 | 4 | 5; draft: CreateDraft; focus: number; aiApproved?: boolean }
+  | { kind: "coordinator"; stage: CoordinatorStage; focus: number; provider?: string; model?: string; returnIntent?: AiIntent }
+  | { kind: "ai-gate"; intent: AiIntent; focus: 0 | 1 }
+  | { kind: "ai-preview"; draft: CreateDraft; focus: 0 | 1 | 2 }
+  | { kind: "skill-picker"; agentId: string; installed: readonly SkillCandidate[]; selected: string[]; query: string; focus: number };
 
 export type NavState = {
   stack: AppScreen[];
@@ -35,6 +43,18 @@ export type NavState = {
 
 export type NavEvent =
   | { type: "ACTIVATE_LANDING_ITEM"; index: number }
+  | { type: "OPEN_COORDINATOR_SETUP" }
+  | { type: "SELECT_COORDINATOR_PROVIDER"; provider: string }
+  | { type: "SELECT_COORDINATOR_MODEL"; model: string }
+  | { type: "SELECT_COORDINATOR_EFFORT"; effort: string }
+  | { type: "REQUEST_AI_ACTION"; intent: AiIntent }
+  | { type: "CONFIGURE_AI_GATE" }
+  | { type: "CANCEL_AI_GATE" }
+  | { type: "OPEN_AI_PREVIEW"; draft: CreateDraft }
+  | { type: "AI_PREVIEW_APPROVE" }
+  | { type: "AI_PREVIEW_REQUEST_CHANGES" }
+  | { type: "AI_PREVIEW_DISCARD" }
+  | { type: "FINALIZE_MODIFY" }
   | { type: "ACTIVATE_AGENT"; agentId: string }
   | { type: "CATALOG_QUERY"; value: string }
   | { type: "FOCUS_CATALOG_RESULTS"; query?: string }
@@ -51,6 +71,9 @@ export type NavEvent =
   | { type: "EDIT_SKILLS_START_ADD" }
   | { type: "EDIT_SKILLS_INPUT"; value: string }
   | { type: "EDIT_SKILLS_ADD" }
+  | { type: "OPEN_SKILL_PICKER"; installed: readonly SkillCandidate[] }
+  | { type: "SKILL_PICKER_QUERY"; value: string }
+  | { type: "SKILL_PICKER_TOGGLE"; skill: string }
   | { type: "EDIT_TEXT_INPUT"; value: string }
   | { type: "EDIT_OPERATIONS_INPUT"; value: string }
   | { type: "EDIT_COMMIT"; agentId?: string }
@@ -119,7 +142,33 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
       if (screen.kind !== "landing") return state;
       return event.index === 0
         ? push(state, { kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false })
-        : event.index === 1 ? push(state, { kind: "create", step: 0, draft: { ...EMPTY_DRAFT, skills: [] }, focus: 0 }) : state;
+        : event.index === 1 ? push(state, { kind: "create", step: 0, draft: { ...EMPTY_DRAFT, skills: [] }, focus: 0 })
+          : event.index === 2 ? push(state, { kind: "coordinator", stage: "settings", focus: 0 }) : state;
+    case "OPEN_COORDINATOR_SETUP":
+      return screen.kind === "coordinator" && screen.stage === "settings" ? replaceTop(state, { kind: "coordinator", stage: "provider", focus: 0, ...(screen.returnIntent === undefined ? {} : { returnIntent: screen.returnIntent }) }) : state;
+    case "SELECT_COORDINATOR_PROVIDER":
+      return screen.kind === "coordinator" && screen.stage === "provider" ? replaceTop(state, { kind: "coordinator", stage: "model", focus: 0, provider: event.provider, ...(screen.returnIntent === undefined ? {} : { returnIntent: screen.returnIntent }) }) : state;
+    case "SELECT_COORDINATOR_MODEL":
+      return screen.kind === "coordinator" && screen.stage === "model" && screen.provider ? replaceTop(state, { kind: "coordinator", stage: "effort", focus: 0, provider: screen.provider, model: event.model, ...(screen.returnIntent === undefined ? {} : { returnIntent: screen.returnIntent }) }) : state;
+    case "SELECT_COORDINATOR_EFFORT":
+      return screen.kind === "coordinator" && screen.stage === "effort" ? replaceTop(state, { kind: "coordinator", stage: "settings", focus: 0, ...(screen.returnIntent === undefined ? {} : { returnIntent: screen.returnIntent }) }) : state;
+    case "REQUEST_AI_ACTION":
+      return push(state, { kind: "ai-gate", intent: event.intent, focus: 0 });
+    case "CONFIGURE_AI_GATE":
+      return screen.kind === "ai-gate" ? replaceTop(state, { kind: "coordinator", stage: "provider", focus: 0, returnIntent: screen.intent }) : state;
+    case "CANCEL_AI_GATE":
+      return screen.kind === "ai-gate" ? pop(state) : state;
+    case "OPEN_AI_PREVIEW":
+      return screen.kind === "create" ? push(state, { kind: "ai-preview", draft: { ...event.draft, skills: [...event.draft.skills] }, focus: 0 }) : state;
+    case "AI_PREVIEW_APPROVE": {
+      const parent = state.stack.at(-2);
+      return screen.kind === "ai-preview" && parent?.kind === "create" ? { ...state, stack: [...state.stack.slice(0, -2), { ...parent, draft: { ...screen.draft, skills: [...screen.draft.skills] }, aiApproved: true }] } : state;
+    }
+    case "AI_PREVIEW_REQUEST_CHANGES":
+    case "AI_PREVIEW_DISCARD":
+      return screen.kind === "ai-preview" ? pop(state) : state;
+    case "FINALIZE_MODIFY":
+      return state;
     case "ACTIVATE_AGENT":
       return screen.kind === "catalog" ? push(state, { kind: "info", agentId: event.agentId, focus: 0 }) : state;
     case "CATALOG_QUERY":
@@ -129,13 +178,16 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
     case "FOCUS_CATALOG_SEARCH":
       return screen.kind === "catalog" ? replaceTop(state, { ...screen, searchFocused: true }) : state;
     case "MOVE_FOCUS": {
-      const max = event.maxFocus ?? (screen.kind === "landing" ? 1 : screen.kind === "modify" && screen.edit.mode === "menu" ? modifyMaxFocus(screen) : screen.kind === "modify" && screen.edit.mode === "skills" ? screen.edit.skills.length : screen.kind === "delete" ? 1 : 0);
-      if (screen.kind === "landing") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) as 0 | 1 });
+      const max = event.maxFocus ?? (screen.kind === "landing" ? 2 : screen.kind === "coordinator" ? 0 : screen.kind === "ai-gate" ? 1 : screen.kind === "ai-preview" ? 2 : screen.kind === "modify" && screen.edit.mode === "menu" ? modifyMaxFocus(screen) : screen.kind === "modify" && screen.edit.mode === "skills" ? screen.edit.skills.length : screen.kind === "delete" ? 1 : 0);
+      if (screen.kind === "landing") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) as 0 | 1 | 2 });
       if (screen.kind === "catalog") return replaceTop(state, { ...screen, searchFocused: false, focus: clamp(screen.focus + event.delta, max) });
       if (screen.kind === "info" || screen.kind === "model" || screen.kind === "effort" || screen.kind === "create") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) });
       if (screen.kind === "modify" && screen.edit.mode === "menu") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) });
       if (screen.kind === "modify" && screen.edit.mode === "skills") return replaceTop(state, { ...screen, edit: { ...screen.edit, focus: clamp(screen.edit.focus + event.delta, max) } });
       if (screen.kind === "delete") return replaceTop(state, { ...screen, confirmFocus: clamp(screen.confirmFocus + event.delta, 1) as 0 | 1 });
+      if (screen.kind === "coordinator") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) });
+      if (screen.kind === "ai-gate") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, 1) as 0 | 1 });
+      if (screen.kind === "ai-preview") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, 2) as 0 | 1 | 2 });
       return state;
     }
     case "PAGE":
@@ -177,6 +229,17 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
       const skill = screen.edit.input.trim();
       const skills = skill && !screen.edit.skills.includes(skill) ? [...screen.edit.skills, skill] : [...screen.edit.skills];
       return replaceTop(state, { ...screen, edit: skillDraft(skills, clamp(screen.edit.focus, skills.length)) });
+    }
+    case "OPEN_SKILL_PICKER":
+      return screen.kind === "modify" && screen.edit.mode === "skills" ? push(state, { kind: "skill-picker", agentId: screen.agentId, installed: event.installed, selected: [...screen.edit.skills], query: "", focus: 0 }) : state;
+    case "SKILL_PICKER_QUERY":
+      return screen.kind === "skill-picker" ? replaceTop(state, { ...screen, query: event.value, focus: 0 }) : state;
+    case "SKILL_PICKER_TOGGLE": {
+      if (screen.kind !== "skill-picker") return state;
+      const selected = screen.selected.includes(event.skill) ? screen.selected.filter((skill) => skill !== event.skill) : [...screen.selected, event.skill];
+      const parent = state.stack.at(-2);
+      if (parent?.kind !== "modify" || parent.edit.mode !== "skills") return state;
+      return { ...state, stack: [...state.stack.slice(0, -2), { ...parent, edit: skillDraft(selected) }] };
     }
     case "EDIT_TEXT_INPUT":
       return screen.kind === "modify" && screen.edit.mode === "text" ? replaceTop(state, { ...screen, edit: { ...screen.edit, value: event.value } }) : state;

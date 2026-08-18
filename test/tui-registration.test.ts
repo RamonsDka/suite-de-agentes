@@ -7,6 +7,7 @@ import plugin, {
   AGENT_SUITE_KEY,
   buildCatalogOptions,
   catalogDetailMessage,
+  coordinatorSessionForHost,
   openAgentSuite,
   registerSuiteKeymap,
   registerSuiteSlashCommand,
@@ -126,6 +127,13 @@ describe("Agent Suite WU1 registration", () => {
     const source = readFileSync(join(process.cwd(), "src/tui/index.tsx"), "utf8");
     expect(source).not.toMatch(/api\.route\./);
     expect(source).not.toMatch(/registerSuiteRoute|navigateSuiteRoute|leaveSuiteRoute|selectSuiteRouteItem/);
+  });
+
+  it("adapts the mounted host client only when it exposes tool and session APIs", () => {
+    const client = { tool: {}, session: {} };
+
+    expect(coordinatorSessionForHost({} as never)).toBeUndefined();
+    expect(coordinatorSessionForHost({ client } as never)).toEqual(expect.objectContaining({ prompt: expect.any(Function) }));
   });
 
   it("uses the native opener once when custom mount fails synchronously", () => {

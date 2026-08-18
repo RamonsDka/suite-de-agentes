@@ -1,4 +1,4 @@
-import type { AgentCatalogRow, CustomAgent, SuiteConfig } from "../core/types.ts";
+import type { AgentCatalogRow, CoordinatorConfig, CustomAgent, SuiteConfig } from "../core/types.ts";
 import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { buildSuiteDeAgentesCatalog, SUITE_DE_AGENTES_SEED } from "../core/suites.ts";
@@ -21,6 +21,8 @@ export interface AgentSuiteController {
   setOperations(id: string, prompt: string): Promise<void>;
   patchAgent(id: string, patch: AgentPatch): Promise<void>;
   operations?(id: string): string | undefined;
+  coordinator?(): CoordinatorConfig | undefined;
+  setCoordinator?(coordinator: CoordinatorConfig): Promise<void>;
 }
 
 type ControllerOptions = {
@@ -171,5 +173,7 @@ export function createAgentSuiteController(
     setOperations: async (id, prompt) => mutation(() => { const agent = config.customAgents[id]; if (!agent) throw new Error(`Unknown custom agent: ${id}`); agent.prompt = prompt; }),
     patchAgent,
     operations: (id) => config.customAgents[id]?.prompt ?? config.baseOverrides?.[id]?.operations,
+    coordinator: () => config.coordinator && { ...config.coordinator },
+    setCoordinator: async (coordinator) => mutation(() => { config = { ...config, coordinator: { ...coordinator } }; }),
   };
 }
