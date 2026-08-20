@@ -22,17 +22,18 @@ export function screenKeyHints(kind: VisualScreenKind, capability?: { canDelete?
     case "model":
     case "effort": return "↑↓ navega · Enter selecciona · Esc volver";
     case "delete": return "↑↓ elige · Enter confirma · Esc cancela";
+    case "create": return "Enter continúa · Esc volver";
     case "coordinator": return "↑↓ navega · Enter selecciona · Esc volver";
     case "ai-gate": return "Configurar ahora · Cancelar · Enter selecciona · Esc volver";
     case "ai-interview": return "↑↓ navega · Enter responde · Revisar propuesta · Esc cancelar";
     case "ai-preview": return "Approve · Request changes · Discard · Enter selecciona · Esc volver";
-    case "skill-picker": return "Escribe para buscar · ↑↓ navega · Enter alterna/guarda · Esc cancelar";
+    case "skill-picker": return "Escribe para buscar · Enter agrega · Esc volver";
     case "error": return "Enter reintenta · Esc cierra";
   }
-  return "↑↓ navega · Enter selecciona · Esc volver";
 }
 
 export function screenKeyHintsForScreen(screen: AppScreen): string {
+  if (screen.kind === "create" && screen.step === 5) return "Finalizar · Enter guarda · Esc volver";
   if (screen.kind === "modify" && screen.edit.mode === "menu") return "F10 Finalizar · ↑↓ navega · Enter selecciona · Esc volver";
   return screen.kind === "modify" && screen.edit?.mode !== undefined && screen.edit.mode !== "menu"
     ? "Enter guardar · Esc cancelar"

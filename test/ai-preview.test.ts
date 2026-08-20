@@ -14,16 +14,16 @@ describe("AI authoring preview", () => {
     ]));
   });
 
-  it("applies approved preview only to the active in-memory draft and restores it for changes or discard", () => {
-    const create = reduceNav(initialNavState(), { type: "CREATE_START" });
-    const preview = reduceNav(create, { type: "OPEN_AI_PREVIEW", draft });
+  it("keeps approval external and restores the interview for changes or discard", () => {
+    const interview = reduceNav(initialNavState(), { type: "CREATE_START", coordinatorConfigured: true });
+    const preview = reduceNav(interview, { type: "OPEN_AI_PREVIEW", draft });
     const approved = reduceNav(preview, { type: "AI_PREVIEW_APPROVE" });
     const requested = reduceNav(preview, { type: "AI_PREVIEW_REQUEST_CHANGES" });
     const discarded = reduceNav(preview, { type: "AI_PREVIEW_DISCARD" });
 
-    expect(approved.stack.at(-1)).toMatchObject({ kind: "create", draft, aiApproved: true });
-    expect(requested.stack.at(-1)).toMatchObject({ kind: "create", draft: { id: "" } });
-    expect(discarded.stack.at(-1)).toMatchObject({ kind: "create", draft: { id: "" } });
+    expect(approved.stack.at(-1)).toMatchObject({ kind: "ai-preview", draft });
+    expect(requested.stack.at(-1)).toMatchObject({ kind: "ai-interview" });
+    expect(discarded).toEqual(initialNavState());
   });
 
   it("finalizes only after controller persistence succeeds and reports saved or pending state", async () => {

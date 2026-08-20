@@ -81,7 +81,7 @@ describe("Agent Suite navigation", () => {
     expect(requested.stack.at(-1)).toEqual({ kind: "ai-gate", intent: "assisted-authoring", focus: 0 });
     expect(cancelled).toEqual(initialNavState());
     expect(configuring.stack.at(-1)).toMatchObject({ kind: "coordinator", stage: "provider", returnIntent: "assisted-authoring" });
-    expect(reduceNav(reduceNav(reduceNav(configuring, { type: "SELECT_COORDINATOR_PROVIDER", provider: "openai" }), { type: "SELECT_COORDINATOR_MODEL", model: "gpt-5" }), { type: "SELECT_COORDINATOR_EFFORT", effort: "" }).stack.at(-1)).toEqual({ kind: "coordinator", stage: "settings", focus: 0, returnIntent: "assisted-authoring" });
+    expect(reduceNav(reduceNav(reduceNav(configuring, { type: "SELECT_COORDINATOR_PROVIDER", provider: "openai" }), { type: "SELECT_COORDINATOR_MODEL", model: "gpt-5" }), { type: "SELECT_COORDINATOR_EFFORT", effort: "" }).stack.at(-1)).toEqual({ kind: "ai-gate", intent: "assisted-authoring", focus: 0 });
     expect(coordinatorStatus()).toEqual({ label: "No configurado", status: "error" });
     expect(coordinatorStatus({ provider: "openai", model: "gpt-5" })).toEqual({ label: "Configurado", status: "success" });
   });
@@ -162,22 +162,18 @@ describe("Agent Suite navigation", () => {
     expect(returned.stack.at(-1)).toMatchObject({ kind: "effort", agentId: "general", focus: 0 });
   });
 
-  it("keeps create draft values while moving between steps and closes only from landing", () => {
+  it("closes only once and routes create through the coordinator gate", () => {
     const create = reduceNav(initialNavState(), { type: "CREATE_START" });
-    const entered = reduceNav(create, { type: "CREATE_INPUT", field: "description", value: "A test agent" });
-    const next = reduceNav(entered, { type: "CREATE_NEXT" });
-    const previous = reduceNav(next, { type: "CREATE_PREV" });
     const closing = reduceNav(initialNavState(), { type: "REQUEST_CLOSE" });
-    expect((previous.stack.at(-1) as any).draft.description).toBe("A test agent");
-    expect(previous.stack.at(-1)).toMatchObject({ kind: "create", step: 0 });
+    expect(create.stack.at(-1)).toMatchObject({ kind: "ai-gate", intent: "agent-creation-interview" });
     expect(closing.closing).toBe(true);
   });
 
   it("maps every WU1 screen title and bounds catalog rows", () => {
-    const kinds: AppScreen["kind"][] = ["landing", "catalog", "info", "modify", "model", "effort", "delete", "create"];
+    const kinds: AppScreen["kind"][] = ["landing", "catalog", "info", "modify", "model", "effort", "delete", "ai-interview"];
     expect(kinds.map((kind) => screenTitle({ kind } as AppScreen))).toEqual([
       "SUITE DE AGENTES — v1.0.1", "CATALOGO DE AGENTES", "INFO DEL AGENTE", "MODIFICAR AGENTE",
-      "SELECCIONAR EL MODELO DE IA", "SELECCIONAR NIVEL DE ESFUERZO", "ADVERTENCIA", "CREAR AGENTE — v1.0.1",
+      "SELECCIONAR EL MODELO DE IA", "SELECCIONAR NIVEL DE ESFUERZO", "ADVERTENCIA", "ENTREVISTA DE AGENTE",
     ]);
     expect(pageRows(Array.from({ length: 8 }, (_, index) => index), 1)).toEqual([6, 7]);
     expect(MAX_VISIBLE_ROWS).toBe(6);

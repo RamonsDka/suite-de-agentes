@@ -416,7 +416,8 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
         : screen.edit.mode === "skills"
           ? { ...screen, edit: { ...screen.edit, input: submittedValue, adding: true } }
           : screen;
-    void applyInlineEdit(props.controller, "agentId" in target ? target.agentId : "", target, dispatch).then((error) => setOperationError(error)).finally(() => setBusy(false));
+    const targetAgentId = "agentId" in target && typeof target.agentId === "string" ? target.agentId : "";
+    void applyInlineEdit(props.controller, targetAgentId, target, dispatch).then((error) => setOperationError(error)).finally(() => setBusy(false));
   };
   const runCreate = (draft: CreateDraft) => {
     if (busy()) return;

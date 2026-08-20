@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { reduceNav, type NavState } from "../src/tui/agent-suite-nav.ts";
-import { eventForKey } from "../src/tui/agent-suite-app.tsx";
-import type { KeyEvent } from "@opencode-ai/plugin/tui";
-import { advanceCreateDraft, applyCreateSubmission } from "../src/tui/agent-suite-app.tsx";
+import { initialNavState, reduceNav } from "../src/tui/agent-suite-nav.ts";
+import { applyCreateSubmission } from "../src/tui/agent-suite-app.tsx";
 import { createDraftFields, createStepPresentation, createSubmissionAction, validateCreateDraft, validateCreateStep } from "../src/tui/screens/create-agent.tsx";
 import type { CreateDraft } from "../src/tui/agent-suite-nav.ts";
 import { createAgentSuiteController } from "../src/tui/agent-suite-controller.ts";
@@ -36,21 +34,11 @@ function controller(): AgentSuiteController & { calls: string[]; submitted?: Cre
   };
 }
 
-const createState: NavState = {
-  stack: [{ kind: "landing", focus: 0 }, { kind: "create", step: 0, draft: { id: "", description: "", skills: [], operations: "", model: "", effort: "" }, focus: 0 }],
-  busy: false,
-  closing: false,
-};
-
 describe("Agent Suite create agent", () => {
-  it("captures the complete draft across the six ordered fields", async () => {
-    const filled = ["id", "description", "skills", "operations", "model", "effort"].reduce(
-      (state, field, index) => reduceNav(reduceNav(state, { type: "CREATE_INPUT", field: field as keyof CreateDraft, value: field === "skills" ? ["testing"] : draft[field as keyof CreateDraft] as string }), { type: "CREATE_NEXT" }),
-      createState,
-    );
+  it("persists the complete approved draft exactly once", async () => {
     const fake = controller();
     const dispatch = vi.fn();
-    const error = await applyCreateSubmission(fake, (filled.stack.at(-1) as Extract<NavState["stack"][number], { kind: "create" }>).draft, dispatch);
+    const error = await applyCreateSubmission(fake, draft, dispatch);
 
     expect(error).toBeUndefined();
     expect(fake.calls).toEqual(["create", "refresh"]);
@@ -79,27 +67,9 @@ describe("Agent Suite create agent", () => {
     expect(validateCreateDraft(draft, [draft.id])).toBe("El identificador ya existe.");
   });
 
-  it("leaves Enter ownership to the focused create Input and blocks invalid advancement", () => {
-    expect(eventForKey({ name: "return" } as KeyEvent, createState)).toBeUndefined();
-    const dispatch = vi.fn();
-    expect(advanceCreateDraft(createState.stack[1].kind === "create" ? createState.stack[1].draft : draft, 0, dispatch)).toBe("El identificador es obligatorio.");
-    expect(dispatch).not.toHaveBeenCalled();
-  });
-
-  it("keeps the draft values when moving back from the final step", () => {
-    const entered = reduceNav(createState, { type: "CREATE_INPUT", field: "id", value: draft.id });
-    const final = reduceNav({ ...entered, stack: [{ ...entered.stack[0] }, { ...(entered.stack[1] as Extract<NavState["stack"][number], { kind: "create" }>), step: 5 }] }, { type: "CREATE_INPUT", field: "model", value: draft.model });
-    const previous = reduceNav(final, { type: "CREATE_PREV" });
-
-    expect(previous.stack.at(-1)).toMatchObject({ kind: "create", step: 4, draft: { id: draft.id, model: draft.model } });
-  });
-
-  it("leaves the completed wizard on the catalog instead of allowing duplicate Enter submits", () => {
-    const final = { ...createState, stack: [...createState.stack.slice(0, -1), { kind: "create" as const, step: 5 as const, draft, focus: 0 }] };
-    const completed = reduceNav(final, { type: "CREATE_SUBMIT" });
-
-    expect(completed.stack.at(-1)).toMatchObject({ kind: "catalog", page: 0, focus: 0, searchFocused: false });
-    expect(completed.stack.some((screen) => screen.kind === "create")).toBe(false);
+  it("routes creation to the interview or coordinator gate instead of the wizard", () => {
+    expect(reduceNav(initialNavState(), { type: "CREATE_START", coordinatorConfigured: true }).stack.at(-1)).toMatchObject({ kind: "ai-interview" });
+    expect(reduceNav(initialNavState(), { type: "CREATE_START", coordinatorConfigured: false }).stack.at(-1)).toMatchObject({ kind: "ai-gate" });
   });
 
   it("describes each wizard step with the preserved field value", () => {

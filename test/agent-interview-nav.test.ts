@@ -56,6 +56,6 @@ describe("adaptive interview navigation", () => {
       "Revisar propuesta",
       "Cancelar",
     ]);
-    expect(screenTitle({ kind: "ai-interview", focus: 0 })).toContain("ENTREVISTA");
+    expect(screenTitle({ kind: "ai-interview" })).toContain("ENTREVISTA");
   });
 });

@@ -28,6 +28,7 @@ export function screenTitle(screen: Pick<AppScreen, "kind"> & { disabled?: boole
     case "model": return "SELECCIONAR EL MODELO DE IA";
     case "effort": return "SELECCIONAR NIVEL DE ESFUERZO";
     case "delete": return "ADVERTENCIA";
+    case "create": return `CREAR AGENTE — v${PLUGIN_VERSION}`;
     case "coordinator": return "CONFIGURACIÓN DEL COORDINADOR";
     case "ai-gate": return "CONFIGURAR COORDINADOR";
     case "ai-interview": return "ENTREVISTA DE AGENTE";
