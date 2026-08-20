@@ -224,7 +224,7 @@ describe("Agent Suite inline editing", () => {
       { kind: "landing", focus: 0 }, { kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false }, { kind: "info", agentId: custom.id, focus: 0 },
       { kind: "modify", agentId: custom.id, focus: 0, edit: { mode: "menu" } }, { kind: "model", agentId: custom.id, focus: 0 },
       { kind: "effort", agentId: custom.id, focus: 0 }, { kind: "delete", agentId: custom.id, confirmFocus: 0 },
-      { kind: "create", step: 0, draft: { id: "", description: "", skills: [], operations: "", model: "", effort: "" }, focus: 0 },
+      { kind: "ai-interview", focus: 0 },
     ];
     for (const screen of screens) expect(suiteScreenKeybar(screen)).toBe(screen.kind === "modify" ? "F10 Finalizar · ↑↓ navega · Enter selecciona · Esc volver" : screenKeyHints(screen.kind));
     expect(suiteScreenKeybar(screens[0]!, true)).toBe(screenKeyHints("error"));
