@@ -76,7 +76,7 @@ export type NavEvent =
   | { type: "OPEN_MODIFY"; agentId?: string; custom?: boolean }
   | { type: "DEACTIVATE_AGENT"; agentId: string }
   | { type: "REACTIVATE_AGENT"; agentId: string }
-  | { type: "MODIFY_ACTIVATE"; option: "id" | "description" | "model" | "effort" | "skills" | "operations" | "delete" | "back"; skills?: string[]; operations?: string; value?: string }
+  | { type: "MODIFY_ACTIVATE"; option: "ai" | "id" | "description" | "model" | "effort" | "skills" | "operations" | "delete" | "back"; skills?: string[]; operations?: string; value?: string }
   | { type: "SELECT_MODEL"; model: string }
   | { type: "SELECT_EFFORT"; effort: string }
   | { type: "EDIT_SKILLS_TOGGLE"; index: number; skill?: string }
@@ -315,6 +315,7 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
         : { kind: "modify", agentId: event.agentId ?? screen.agentId, focus: 0, edit: { mode: "menu" }, protectedBase: true });
     case "MODIFY_ACTIVATE":
       if (screen.kind !== "modify" || screen.edit.mode !== "menu") return state;
+      if (event.option === "ai") return state;
       if (event.option === "model") return push(state, { kind: "model", agentId: screen.agentId, focus: 0 });
       if (event.option === "effort") return push(state, { kind: "effort", agentId: screen.agentId, focus: 0 });
       if (screen.editable !== true && screen.protectedBase !== true && event.option !== "back") return state;

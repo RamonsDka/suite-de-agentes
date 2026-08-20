@@ -476,6 +476,28 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
       }).catch((error) => setOperationError(operationErrorMessage(error))).finally(() => setBusy(false));
       return;
     }
+    if (event.type === "MODIFY_ACTIVATE" && event.option === "ai" && currentScreen?.kind === "modify") {
+      const row = catalogRows().find((item) => item.id === currentScreen.agentId);
+      if (!row) {
+        setOperationError("Agente no encontrado.");
+        return;
+      }
+      const draft: CreateDraft = {
+        id: row.id,
+        description: row.description ?? row.id,
+        skills: [...row.skills],
+        operations: props.controller.operations?.(row.id) ?? "",
+        model: row.model ?? "",
+        effort: row.variant ?? "default",
+      };
+      const coordinator = props.controller.coordinator?.();
+      const nextEvent: NavEvent = coordinator
+        ? { type: "OPEN_AI_INTERVIEW", request: { source: "modify", agentId: row.id, draft } }
+        : { type: "REQUEST_AI_ACTION", intent: "assisted-authoring", request: { source: "modify", agentId: row.id, draft } };
+      setOperationError(undefined);
+      setState(normalizeCatalogState(reduceNav(current, nextEvent), catalogRows()));
+      return;
+    }
     if (event.type === "INTERVIEW_REVIEW" && currentScreen?.kind === "ai-interview") {
       const session = interviewSession();
       setState(normalizeCatalogState(reduceNav(current, { type: "OPEN_AI_PREVIEW", draft: checkpointDraft(session.checkpoint), source: currentScreen.request?.source ?? "create", agentId: currentScreen.request?.agentId, rationale: session.checkpoint.recommendation?.rationale, pendingSkills: session.checkpoint.pendingSkills, recommendation: session.checkpoint.recommendation }), catalogRows()));
