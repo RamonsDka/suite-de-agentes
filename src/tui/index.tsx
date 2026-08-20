@@ -11,7 +11,7 @@ import { createAgentSuiteController, type AgentSuiteController } from "./agent-s
 import { handleAgentSuiteEscape, mountAgentSuite } from "./agent-suite-mount.tsx";
 import { formatCatalogName } from "./visual-tokens.ts";
 import { discoverInstalledSkills } from "./ai/skill-sources.ts";
-import { createCoordinatorSessionFromClient } from "./ai/coordinator-session.ts";
+import { createCoordinatorSessionFromV2Client } from "./ai/coordinator-session.ts";
 import type { CoordinatorSession } from "../core/coordinator.ts";
 
 export const AGENT_SUITE_COMMAND = ":agent-suite";
@@ -85,7 +85,7 @@ export type SuiteOpenFallback = () => void;
 
 export function coordinatorSessionForHost(api: { client?: unknown }): CoordinatorSession | undefined {
   const client = api.client as { tool?: unknown; session?: unknown } | undefined;
-  return client?.tool && client.session ? createCoordinatorSessionFromClient(client as Parameters<typeof createCoordinatorSessionFromClient>[0]) : undefined;
+  return client?.tool && client.session ? createCoordinatorSessionFromV2Client(client as Parameters<typeof createCoordinatorSessionFromV2Client>[0]) : undefined;
 }
 
 type RegistrationApi = Pick<TuiPluginApi, "keymap">;
@@ -112,7 +112,8 @@ function openNativeFallback(api: Pick<TuiPluginApi, "ui">): void {
 export function openAgentSuite(api: TuiPluginApi, fallback: SuiteOpenFallback = () => openNativeFallback(api)): void {
   const opened = safeHostAction("open Agent Suite", () => {
     const runtimeModels = buildRuntimeModelOptions(api);
-    mountAgentSuite({ theme: api.theme, ui: api.ui, modelOptions: (row) => buildAgentModelOptions(row, runtimeModels), variantOptions: (row, model) => buildAgentVariantOptions(row, model, getAvailableModelVariants(api, model)), coordinatorProviders: buildRuntimeCoordinatorProviders(api), installedSkills: () => discoverInstalledSkills(api.client), coordinatorSession: coordinatorSessionForHost(api) }, controllerFactory(api));
+    const controller = controllerFactory(api);
+    mountAgentSuite({ theme: api.theme, ui: api.ui, modelOptions: (row) => buildAgentModelOptions(row, runtimeModels), variantOptions: (row, model) => buildAgentVariantOptions(row, model, getAvailableModelVariants(api, model)), coordinatorProviders: buildRuntimeCoordinatorProviders(api), installedSkills: () => discoverInstalledSkills(api.client), coordinatorSession: coordinatorSessionForHost(api), ingestPendingSkills: controller.ingestPendingSkills }, controller);
     return true;
   }, false);
   if (!opened) fallback();

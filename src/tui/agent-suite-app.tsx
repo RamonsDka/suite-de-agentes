@@ -28,7 +28,7 @@ import { AiPreview, type AiPreviewAction } from "./screens/ai-preview.tsx";
 import { AiInterview } from "./screens/ai-interview.tsx";
 import type { CoordinatorSession, InstalledSkillInput } from "../core/coordinator.ts";
 import { runInterviewTurn } from "../core/coordinator.ts";
-import type { CoordinatorConfig as CoordinatorConfigShape, InterviewCheckpoint } from "../core/types.ts";
+import type { CoordinatorConfig as CoordinatorConfigShape, InterviewCheckpoint, PendingSkill } from "../core/types.ts";
 import { validateAgentId, validateModelId, validateVariantId } from "../core/config.ts";
 
 export interface AgentSuiteAppProps {
@@ -41,6 +41,7 @@ export interface AgentSuiteAppProps {
   coordinatorProviders?: readonly RuntimeCoordinatorProvider[];
   installedSkills?: () => Promise<readonly SkillCandidate[]>;
   coordinatorSession?: CoordinatorSession;
+  ingestPendingSkills?: (agentId: string, pendingSkills: readonly PendingSkill[]) => Promise<void>;
 }
 
 export { appendInterviewAnswer, createInterviewSession } from "./agent-suite-nav.ts";
@@ -427,6 +428,37 @@ export async function finalizeModifyController(controller: AgentSuiteController,
   }
 }
 
+export type ApprovedInterviewSource = { source: "create" } | { source: "modify"; agentId: string };
+export type PendingSkillIngestor = (agentId: string, pendingSkills: readonly PendingSkill[]) => Promise<void>;
+
+export async function applyApprovedInterview(
+  controller: AgentSuiteController,
+  source: ApprovedInterviewSource,
+  draft: CreateDraft,
+  pendingSkills: readonly PendingSkill[],
+  dispatch: (event: NavEvent) => void,
+  ingestPendingSkills?: PendingSkillIngestor,
+): Promise<string | undefined> {
+  const validationError = validateApprovedDraft(draft);
+  if (validationError) return validationError;
+  const normalizedDraft = { ...draft, id: draft.id.trim(), skills: [...draft.skills] };
+  try {
+    const agentId = source.source === "create" ? normalizedDraft.id : source.agentId;
+    if (source.source === "create") await controller.createAgent(normalizedDraft);
+    else await controller.patchAgent(source.agentId, { newId: normalizedDraft.id, description: normalizedDraft.description, skills: normalizedDraft.skills, operations: normalizedDraft.operations, model: normalizedDraft.model, effort: normalizedDraft.effort });
+    controller.refresh();
+    if (pendingSkills.length > 0) {
+      const ingestor = ingestPendingSkills ?? controller.ingestPendingSkills;
+      if (!ingestor) throw new Error("La ingestión segura de skills pendientes no está disponible.");
+      await ingestor(agentId, pendingSkills);
+    }
+    dispatch({ type: "AI_PREVIEW_APPLIED" });
+    return undefined;
+  } catch (error) {
+    return operationErrorMessage(error);
+  }
+}
+
 export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
   const [state, setState] = createSignal(initialNavState());
   const [renderError, setRenderError] = createSignal<string>();
@@ -512,6 +544,21 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
       if (source?.kind === "ai-interview") {
         setInterviewSession((session) => reenterInterviewFromPreview(session, currentScreen.draft));
         setState(normalizeCatalogState(reduceNav(current, event), catalogRows()));
+        return;
+      }
+    }
+    if (event.type === "AI_PREVIEW_APPROVE" && currentScreen?.kind === "ai-preview") {
+      const interview = current.stack.at(-2);
+      if (interview?.kind === "ai-interview") {
+        const agentId = currentScreen.source === "modify" ? currentScreen.agentId ?? interview.request?.agentId : undefined;
+        if (currentScreen.source === "modify" && !agentId) {
+          setOperationError("No se pudo identificar el agente a modificar.");
+          return;
+        }
+        setBusy(true);
+        setOperationError(undefined);
+        void applyApprovedInterview(props.controller, agentId ? { source: "modify", agentId } : { source: "create" }, currentScreen.draft, currentScreen.pendingSkills ?? [], dispatch, props.ingestPendingSkills ?? props.controller.ingestPendingSkills)
+          .then((error) => setOperationError(error)).finally(() => setBusy(false));
         return;
       }
     }
