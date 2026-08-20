@@ -45,7 +45,7 @@ describe("Agent Suite create agent", () => {
     expect(fake.submitted).toEqual(draft);
     expect(fake.calls).not.toContain("skills");
     expect(fake.calls).not.toContain("operations");
-    expect(dispatch).toHaveBeenCalledWith({ type: "CREATE_SUBMIT" });
+    expect(dispatch).toHaveBeenCalledWith({ type: "AI_PREVIEW_APPLIED" });
   });
 
   it("trims a valid padded id before persisting the draft", async () => {
