@@ -5,8 +5,17 @@ type ToolInventoryClient = {
   tool: { ids(): Promise<{ data?: unknown }> };
   session: {
     create(): Promise<{ data?: { id?: unknown } }>;
-    prompt(input: { path: { id: string }; body: { model: { providerID: string; modelID: string }; system: string; tools: Record<string, false>; parts: Array<{ type: "text"; text: string }> } }): Promise<{ data?: { parts?: Array<{ type?: unknown; text?: unknown }> } }>;
+    prompt(input: { path: { id: string }; body: { model: { providerID: string; modelID: string }; variant?: string; system: string; tools: Record<string, false>; parts: Array<{ type: "text"; text: string }> } }): Promise<{ data?: { parts?: Array<{ type?: unknown; text?: unknown }> } }>;
     abort(input: { path: { id: string } }): Promise<unknown>;
+  };
+};
+
+type V2ToolInventoryClient = {
+  tool: { ids(parameters?: Record<string, never>): Promise<{ data?: unknown }> };
+  session: {
+    create(parameters?: Record<string, never>): Promise<{ data?: { id?: unknown } }>;
+    prompt(parameters: { sessionID: string; model: { providerID: string; modelID: string }; system: string; tools: Record<string, false>; parts: Array<{ type: "text"; text: string }> }): Promise<{ data?: { parts?: Array<{ type?: unknown; text?: unknown }> } }>;
+    abort(parameters: { sessionID: string }): Promise<unknown>;
   };
 };
 
@@ -56,6 +65,17 @@ export function createCoordinatorSessionFromClient(client: ToolInventoryClient):
   return coordinatorSessionFromClient(() => client);
 }
 
+export function createCoordinatorSessionFromV2Client(client: V2ToolInventoryClient): CoordinatorSession {
+  return createCoordinatorSessionFromClient({
+    tool: { ids: () => client.tool.ids() },
+    session: {
+      create: () => client.session.create(),
+      prompt: ({ path, body }) => client.session.prompt({ sessionID: path.id, ...body }),
+      abort: ({ path }) => client.session.abort({ sessionID: path.id }),
+    },
+  });
+}
+
 function coordinatorSessionFromClient(getClient: () => ToolInventoryClient): CoordinatorSession {
   return {
     async prompt(input) {
@@ -76,6 +96,7 @@ function coordinatorSessionFromClient(getClient: () => ToolInventoryClient): Coo
           path: { id: sessionID },
           body: {
             model: { providerID: input.coordinator.provider, modelID: input.coordinator.model },
+            ...(input.coordinator.effort ? { variant: input.coordinator.effort } : {}),
             system: input.system,
             tools,
             parts: [{ type: "text", text: input.message }],

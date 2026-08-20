@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildDenyAllToolMap, createCoordinatorSession, createCoordinatorSessionFromClient } from "../src/tui/ai/coordinator-session.ts";
+import { buildDenyAllToolMap, createCoordinatorSession, createCoordinatorSessionFromClient, createCoordinatorSessionFromV2Client } from "../src/tui/ai/coordinator-session.ts";
 
 const coordinator = { provider: "openai", model: "gpt-5", effort: "high" };
 
@@ -106,5 +106,17 @@ describe("Coordinator SDK session adapter", () => {
 
     await expect(createCoordinatorSessionFromClient(client).prompt({ system: "System", message: "Message", coordinator, signal: new AbortController().signal })).resolves.toBe("Draft");
     expect(prompt).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ tools: { read: false } }) }));
+  });
+
+  it("adapts the current v2 mounted host client parameter shape", async () => {
+    const prompt = vi.fn(async () => ({ data: { parts: [{ type: "text", text: "Draft" }] } }));
+    const abort = vi.fn(async () => ({ data: true }));
+    const client = {
+      tool: { ids: vi.fn(async () => ({ data: ["read"] })) },
+      session: { create: vi.fn(async () => ({ data: { id: "coordinator-session" } })), prompt, abort },
+    };
+
+    await expect(createCoordinatorSessionFromV2Client(client).prompt({ system: "System", message: "Message", coordinator, signal: new AbortController().signal })).resolves.toBe("Draft");
+    expect(prompt).toHaveBeenCalledWith(expect.objectContaining({ sessionID: "coordinator-session", variant: "high", tools: { read: false } }));
   });
 });
