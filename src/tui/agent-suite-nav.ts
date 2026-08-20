@@ -1,6 +1,8 @@
 import type { AgentCatalogRow } from "../core/types.ts";
+import type { ModelRecommendation, PendingSkill } from "../core/types.ts";
 import type { SkillCandidate } from "../core/skill-catalog.ts";
 import { editorFields } from "./agent-suite-vm.ts";
+import type { InterviewCheckpoint, InterviewTranscript, InterviewTurn } from "../core/coordinator.ts";
 
 export type ModifyEdit =
   | { mode: "menu" }
@@ -18,7 +20,14 @@ export type CreateDraft = {
 };
 
 export type CoordinatorStage = "settings" | "provider" | "model" | "effort";
-export type AiIntent = "assisted-authoring";
+export type AiIntent = "assisted-authoring" | "agent-creation-interview";
+export type InterviewSource = "create" | "modify";
+
+export type InterviewRequest = {
+  source: InterviewSource;
+  draft: CreateDraft;
+  agentId?: string;
+};
 
 export type AppScreen =
   | { kind: "landing"; focus: 0 | 1 | 2 }
@@ -28,10 +37,10 @@ export type AppScreen =
   | { kind: "effort"; agentId: string; focus: number }
   | { kind: "modify"; agentId: string; focus: number; edit: ModifyEdit; editable?: boolean; protectedBase?: boolean }
   | { kind: "delete"; agentId: string; confirmFocus: 0 | 1 }
-  | { kind: "create"; step: 0 | 1 | 2 | 3 | 4 | 5; draft: CreateDraft; focus: number; aiApproved?: boolean }
+  | { kind: "ai-interview"; focus: number; request?: InterviewRequest }
   | { kind: "coordinator"; stage: CoordinatorStage; focus: number; provider?: string; model?: string; returnIntent?: AiIntent }
-  | { kind: "ai-gate"; intent: AiIntent; focus: 0 | 1 }
-  | { kind: "ai-preview"; draft: CreateDraft; focus: 0 | 1 | 2 }
+  | { kind: "ai-gate"; intent: AiIntent; focus: 0 | 1; request?: InterviewRequest }
+  | { kind: "ai-preview"; draft: CreateDraft; focus: 0 | 1 | 2; source: InterviewSource | "interview"; agentId?: string; rationale?: string; pendingSkills?: readonly PendingSkill[]; recommendation?: ModelRecommendation }
   | { kind: "skill-picker"; agentId: string; installed: readonly SkillCandidate[]; selected: string[]; query: string; focus: number };
 
 export type NavState = {
@@ -42,16 +51,18 @@ export type NavState = {
 };
 
 export type NavEvent =
-  | { type: "ACTIVATE_LANDING_ITEM"; index: number }
+  | { type: "ACTIVATE_LANDING_ITEM"; index: number; coordinatorConfigured?: boolean }
   | { type: "OPEN_COORDINATOR_SETUP" }
   | { type: "SELECT_COORDINATOR_PROVIDER"; provider: string }
   | { type: "SELECT_COORDINATOR_MODEL"; model: string }
   | { type: "SELECT_COORDINATOR_EFFORT"; effort: string }
-  | { type: "REQUEST_AI_ACTION"; intent: AiIntent }
+  | { type: "REQUEST_AI_ACTION"; intent: AiIntent; request?: InterviewRequest }
   | { type: "CONFIGURE_AI_GATE" }
   | { type: "CANCEL_AI_GATE" }
-  | { type: "OPEN_AI_PREVIEW"; draft: CreateDraft }
+  | { type: "OPEN_AI_INTERVIEW"; request: InterviewRequest }
+  | { type: "OPEN_AI_PREVIEW"; draft: CreateDraft; source?: InterviewSource | "interview"; agentId?: string; rationale?: string; pendingSkills?: readonly PendingSkill[]; recommendation?: ModelRecommendation }
   | { type: "AI_PREVIEW_APPROVE" }
+  | { type: "AI_PREVIEW_APPLIED" }
   | { type: "AI_PREVIEW_REQUEST_CHANGES" }
   | { type: "AI_PREVIEW_DISCARD" }
   | { type: "FINALIZE_MODIFY" }
@@ -81,17 +92,64 @@ export type NavEvent =
   | { type: "REQUEST_DELETE"; agentId?: string }
   | { type: "CONFIRM_DELETE" }
   | { type: "CANCEL_DELETE" }
-  | { type: "CREATE_START" }
-  | { type: "CREATE_INPUT"; field: keyof CreateDraft; value: string | string[] }
-  | { type: "CREATE_NEXT" }
-  | { type: "CREATE_PREV" }
-  | { type: "CREATE_SUBMIT" }
+  | { type: "CREATE_START"; coordinatorConfigured?: boolean }
+  | { type: "INTERVIEW_QUICK_REPLY"; reply: string }
+  | { type: "INTERVIEW_INPUT"; value: string }
+  | { type: "INTERVIEW_SUBMIT"; value?: string }
+  | { type: "INTERVIEW_TURN_STARTED" }
+  | { type: "INTERVIEW_TURN_RECEIVED"; turn: InterviewTurn }
+  | { type: "INTERVIEW_RETRY" }
+  | { type: "INTERVIEW_CANCEL" }
+  | { type: "INTERVIEW_REVIEW"; draft?: CreateDraft; rationale?: string; pendingSkills?: readonly PendingSkill[]; recommendation?: ModelRecommendation }
+  | { type: "AI_PREVIEW_EDIT_FIELD"; field: "id" | "description" | "operations" | "skills" | "model" | "effort"; value: string }
+  | { type: "INTERVIEW_CONTINUE" }
   | { type: "BACK" }
   | { type: "REQUEST_CLOSE" }
   | { type: "SET_BUSY"; busy: boolean }
   | { type: "SET_ERROR"; error?: string };
 
 export const EMPTY_DRAFT: CreateDraft = { id: "", description: "", skills: [], operations: "", model: "", effort: "" };
+export const AI_GATE_ACTIONS = ["Configurar ahora", "Cancelar"] as const;
+
+export interface InterviewSession {
+  transcript: InterviewTranscript;
+  checkpoint: InterviewCheckpoint;
+  turn?: InterviewTurn;
+  input: string;
+  error?: string;
+  canceled?: boolean;
+}
+
+export function createInterviewSession(draft: CreateDraft = EMPTY_DRAFT): InterviewSession {
+  const checkpoint: InterviewCheckpoint = { draft: { ...draft, skills: [...draft.skills] }, pendingSkills: [] };
+  return {
+    transcript: [],
+    checkpoint,
+    turn: { question: "¿Qué debe hacer este agente?", quickReplies: ["Describir el objetivo", "Partir de una idea existente"], checkpoint },
+    input: "",
+  };
+}
+
+export function appendInterviewAnswer(session: InterviewSession, answer: string): InterviewSession {
+  const text = answer.trim();
+  if (!text) return session;
+  return { ...session, transcript: [...session.transcript, { role: "user", text }], input: "", error: undefined, canceled: false };
+}
+
+export function applyInterviewTurn(session: InterviewSession, turn: InterviewTurn): InterviewSession {
+  return {
+    ...session,
+    transcript: [...session.transcript, { role: "assistant", text: turn.question }],
+    turn,
+    checkpoint: { ...turn.checkpoint, draft: { ...turn.checkpoint.draft, skills: [...turn.checkpoint.draft.skills] }, pendingSkills: [...turn.checkpoint.pendingSkills] },
+    error: undefined,
+    canceled: false,
+  };
+}
+
+export function preserveInterviewError(session: InterviewSession, error: string): InterviewSession {
+  return { ...session, error, canceled: false };
+}
 
 export function initialNavState(): NavState {
   return { stack: [{ kind: "landing", focus: 0 }], busy: false, closing: false };
@@ -117,17 +175,20 @@ function clamp(value: number, max: number): number {
   return Math.max(0, Math.min(Math.max(0, max), value));
 }
 
-function stepCreate(screen: Extract<AppScreen, { kind: "create" }>, delta: -1 | 1): Extract<AppScreen, { kind: "create" }> {
-  const step = Math.max(0, Math.min(5, screen.step + delta)) as Extract<AppScreen, { kind: "create" }>["step"];
-  return { ...screen, step };
-}
-
 function modifyMaxFocus(screen: Extract<AppScreen, { kind: "modify" }>): number {
   return editorFields({ membership: screen.editable === true ? "custom" : "seed", fullBaseEditing: screen.protectedBase === true }).length - 1;
 }
 
 function skillDraft(skills: string[], focus = 0, adding = false, input = ""): Extract<ModifyEdit, { mode: "skills" }> {
   return { mode: "skills", skills: [...skills], selected: [...skills], focus, adding, input };
+}
+
+function cloneInterviewRequest(request: InterviewRequest): InterviewRequest {
+  return { ...request, draft: { ...request.draft, skills: [...request.draft.skills] } };
+}
+
+function interviewScreen(request?: InterviewRequest): Extract<AppScreen, { kind: "ai-interview" }> {
+  return request ? { kind: "ai-interview", focus: 0, request: cloneInterviewRequest(request) } : { kind: "ai-interview", focus: 0 };
 }
 
 export function reduceNav(state: NavState, event: NavEvent): NavState {
@@ -142,7 +203,7 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
       if (screen.kind !== "landing") return state;
       return event.index === 0
         ? push(state, { kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false })
-        : event.index === 1 ? push(state, { kind: "create", step: 0, draft: { ...EMPTY_DRAFT, skills: [] }, focus: 0 })
+        : event.index === 1 ? push(state, event.coordinatorConfigured === true ? interviewScreen() : { kind: "ai-gate", intent: "agent-creation-interview", focus: 0 })
           : event.index === 2 ? push(state, { kind: "coordinator", stage: "settings", focus: 0 }) : state;
     case "OPEN_COORDINATOR_SETUP":
       return screen.kind === "coordinator" && screen.stage === "settings" ? replaceTop(state, { kind: "coordinator", stage: "provider", focus: 0, ...(screen.returnIntent === undefined ? {} : { returnIntent: screen.returnIntent }) }) : state;
@@ -151,22 +212,66 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
     case "SELECT_COORDINATOR_MODEL":
       return screen.kind === "coordinator" && screen.stage === "model" && screen.provider ? replaceTop(state, { kind: "coordinator", stage: "effort", focus: 0, provider: screen.provider, model: event.model, ...(screen.returnIntent === undefined ? {} : { returnIntent: screen.returnIntent }) }) : state;
     case "SELECT_COORDINATOR_EFFORT":
-      return screen.kind === "coordinator" && screen.stage === "effort" ? replaceTop(state, { kind: "coordinator", stage: "settings", focus: 0, ...(screen.returnIntent === undefined ? {} : { returnIntent: screen.returnIntent }) }) : state;
+      if (screen.kind !== "coordinator" || screen.stage !== "effort") return state;
+      if (screen.returnIntent !== undefined) {
+        const parent = state.stack.at(-2);
+        if (parent?.kind === "ai-gate" && parent.intent === "agent-creation-interview") return { ...state, stack: [...state.stack.slice(0, -2), interviewScreen(parent.request)] };
+        if (parent?.kind === "ai-gate" && parent.request) return { ...state, stack: [...state.stack.slice(0, -2), interviewScreen(parent.request)] };
+        return pop(state);
+      }
+      return replaceTop(state, { kind: "coordinator", stage: "settings", focus: 0 });
     case "REQUEST_AI_ACTION":
-      return push(state, { kind: "ai-gate", intent: event.intent, focus: 0 });
+      return push(state, { kind: "ai-gate", intent: event.intent, focus: 0, ...(event.request ? { request: { ...event.request, draft: { ...event.request.draft, skills: [...event.request.draft.skills] } } } : {}) });
+    case "OPEN_AI_INTERVIEW":
+      return screen.kind === "modify" || screen.kind === "info" ? push(state, interviewScreen(event.request)) : state;
+    case "INTERVIEW_QUICK_REPLY":
+      return screen.kind === "ai-interview" ? replaceTop(state, { ...screen, focus: 0 }) : state;
+    case "INTERVIEW_INPUT":
+      return screen.kind === "ai-interview" ? replaceTop(state, { ...screen, focus: 0 }) : state;
+    case "INTERVIEW_SUBMIT":
+      return screen.kind === "ai-interview" ? replaceTop(state, { ...screen, focus: 0 }) : state;
+    case "INTERVIEW_TURN_STARTED":
+      return screen.kind === "ai-interview" ? replaceTop(state, { ...screen, focus: 0 }) : state;
+    case "INTERVIEW_TURN_RECEIVED":
+      return screen.kind === "ai-interview" ? replaceTop(state, { ...screen, focus: 0 }) : state;
+    case "INTERVIEW_RETRY":
+      return screen.kind === "ai-interview" ? replaceTop(state, { ...screen, focus: 0 }) : state;
+    case "INTERVIEW_CANCEL":
+      return screen.kind === "ai-interview" ? pop(state) : state;
+    case "INTERVIEW_REVIEW":
+      return screen.kind === "ai-interview" && event.draft
+        ? push(state, { kind: "ai-preview", draft: { ...event.draft, skills: [...event.draft.skills] }, focus: 0, source: screen.request?.source ?? "create", ...(screen.request?.agentId ? { agentId: screen.request.agentId } : {}), ...(event.rationale ? { rationale: event.rationale } : {}), ...(event.pendingSkills ? { pendingSkills: [...event.pendingSkills] } : {}), ...(event.recommendation ? { recommendation: { ...event.recommendation } } : {}) })
+        : screen.kind === "ai-interview" ? replaceTop(state, { ...screen, focus: 0 }) : state;
+    case "INTERVIEW_CONTINUE":
+      return screen.kind === "ai-interview" ? replaceTop(state, { ...screen, focus: 0 }) : state;
     case "CONFIGURE_AI_GATE":
-      return screen.kind === "ai-gate" ? replaceTop(state, { kind: "coordinator", stage: "provider", focus: 0, returnIntent: screen.intent }) : state;
+      return screen.kind === "ai-gate" ? push(state, { kind: "coordinator", stage: "provider", focus: 0, returnIntent: screen.intent }) : state;
     case "CANCEL_AI_GATE":
       return screen.kind === "ai-gate" ? pop(state) : state;
     case "OPEN_AI_PREVIEW":
-      return screen.kind === "create" ? push(state, { kind: "ai-preview", draft: { ...event.draft, skills: [...event.draft.skills] }, focus: 0 }) : state;
+      if (screen.kind !== "modify" && screen.kind !== "ai-interview") return state;
+      {
+        const source = event.source ?? (screen.kind === "modify" ? "modify" : screen.kind === "ai-interview" && screen.request?.source === "modify" ? "modify" : "interview");
+        const agentId = event.agentId ?? (screen.kind === "ai-interview" ? screen.request?.agentId : undefined);
+        return push(state, { kind: "ai-preview", draft: { ...event.draft, skills: [...event.draft.skills] }, focus: 0, source, ...(agentId ? { agentId } : {}), ...(event.rationale ? { rationale: event.rationale } : {}), ...(event.pendingSkills ? { pendingSkills: [...event.pendingSkills] } : {}), ...(event.recommendation ? { recommendation: { ...event.recommendation } } : {}) });
+      }
     case "AI_PREVIEW_APPROVE": {
-      const parent = state.stack.at(-2);
-      return screen.kind === "ai-preview" && parent?.kind === "create" ? { ...state, stack: [...state.stack.slice(0, -2), { ...parent, draft: { ...screen.draft, skills: [...screen.draft.skills] }, aiApproved: true }] } : state;
+      if (screen.kind !== "ai-preview") return state;
+      return state;
     }
-    case "AI_PREVIEW_REQUEST_CHANGES":
+    case "AI_PREVIEW_EDIT_FIELD":
+      if (screen.kind !== "ai-preview") return state;
+      return replaceTop(state, { ...screen, draft: { ...screen.draft, [event.field]: event.field === "skills" ? event.value.split(",").map((skill) => skill.trim()).filter(Boolean) : event.value } });
+    case "AI_PREVIEW_APPLIED":
+      return screen.kind === "ai-preview" && (state.stack.at(-2)?.kind === "ai-interview" || state.stack.at(-2)?.kind === "modify") ? { ...state, stack: state.stack.slice(0, -2) } : state;
+    case "AI_PREVIEW_REQUEST_CHANGES": {
+      const request = state.stack.at(-2);
+      if (screen.kind !== "ai-preview") return state;
+      if (request?.kind === "ai-interview") return replaceTop(pop(state), request);
+      return pop(state);
+    }
     case "AI_PREVIEW_DISCARD":
-      return screen.kind === "ai-preview" ? pop(state) : state;
+      return screen.kind === "ai-preview" && state.stack.at(-2)?.kind === "ai-interview" ? { ...state, stack: state.stack.slice(0, -2) } : screen.kind === "ai-preview" ? pop(state) : state;
     case "FINALIZE_MODIFY":
       return state;
     case "ACTIVATE_AGENT":
@@ -178,10 +283,10 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
     case "FOCUS_CATALOG_SEARCH":
       return screen.kind === "catalog" ? replaceTop(state, { ...screen, searchFocused: true }) : state;
     case "MOVE_FOCUS": {
-      const max = event.maxFocus ?? (screen.kind === "landing" ? 2 : screen.kind === "coordinator" ? 0 : screen.kind === "ai-gate" ? 1 : screen.kind === "ai-preview" ? 2 : screen.kind === "modify" && screen.edit.mode === "menu" ? modifyMaxFocus(screen) : screen.kind === "modify" && screen.edit.mode === "skills" ? screen.edit.skills.length : screen.kind === "delete" ? 1 : 0);
+      const max = event.maxFocus ?? (screen.kind === "landing" ? 2 : screen.kind === "coordinator" ? 0 : screen.kind === "ai-gate" ? 1 : screen.kind === "ai-preview" ? 2 : screen.kind === "ai-interview" ? 0 : screen.kind === "modify" && screen.edit.mode === "menu" ? modifyMaxFocus(screen) : screen.kind === "modify" && screen.edit.mode === "skills" ? screen.edit.skills.length : screen.kind === "delete" ? 1 : 0);
       if (screen.kind === "landing") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) as 0 | 1 | 2 });
       if (screen.kind === "catalog") return replaceTop(state, { ...screen, searchFocused: false, focus: clamp(screen.focus + event.delta, max) });
-      if (screen.kind === "info" || screen.kind === "model" || screen.kind === "effort" || screen.kind === "create") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) });
+      if (screen.kind === "info" || screen.kind === "model" || screen.kind === "effort" || screen.kind === "ai-interview") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) });
       if (screen.kind === "modify" && screen.edit.mode === "menu") return replaceTop(state, { ...screen, focus: clamp(screen.focus + event.delta, max) });
       if (screen.kind === "modify" && screen.edit.mode === "skills") return replaceTop(state, { ...screen, edit: { ...screen.edit, focus: clamp(screen.edit.focus + event.delta, max) } });
       if (screen.kind === "delete") return replaceTop(state, { ...screen, confirmFocus: clamp(screen.confirmFocus + event.delta, 1) as 0 | 1 });
@@ -267,18 +372,10 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
     case "CANCEL_DELETE":
       return screen.kind === "delete" ? pop(state) : state;
     case "CREATE_START":
-      return push(state, { kind: "create", step: 0, draft: { ...EMPTY_DRAFT, skills: [] }, focus: 0 });
-    case "CREATE_INPUT":
-      return screen.kind === "create" ? replaceTop(state, { ...screen, draft: { ...screen.draft, [event.field]: event.field === "skills" && typeof event.value === "string" ? [event.value] : event.value } }) : state;
-    case "CREATE_NEXT":
-      return screen.kind === "create" ? replaceTop(state, stepCreate(screen, 1)) : state;
-    case "CREATE_PREV":
-      return screen.kind === "create" ? replaceTop(state, stepCreate(screen, -1)) : state;
-    case "CREATE_SUBMIT":
-      return screen.kind === "create" ? replaceTop(state, { kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false }) : state;
+      return push(state, event.coordinatorConfigured === true ? interviewScreen() : { kind: "ai-gate", intent: "agent-creation-interview", focus: 0 });
     case "BACK":
       if (screen.kind === "modify" && screen.edit.mode !== "menu") return replaceTop(state, { ...screen, edit: { mode: "menu" } });
-      if (screen.kind === "create" && screen.step > 0) return replaceTop(state, stepCreate(screen, -1));
+      if (screen.kind === "ai-interview") return pop(state);
       return pop(state);
     default:
       return state;

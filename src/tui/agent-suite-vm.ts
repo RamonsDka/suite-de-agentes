@@ -28,12 +28,13 @@ export function screenTitle(screen: Pick<AppScreen, "kind"> & { disabled?: boole
     case "model": return "SELECCIONAR EL MODELO DE IA";
     case "effort": return "SELECCIONAR NIVEL DE ESFUERZO";
     case "delete": return "ADVERTENCIA";
-    case "create": return `CREAR AGENTE — v${PLUGIN_VERSION}`;
     case "coordinator": return "CONFIGURACIÓN DEL COORDINADOR";
     case "ai-gate": return "CONFIGURAR COORDINADOR";
+    case "ai-interview": return "ENTREVISTA DE AGENTE";
     case "ai-preview": return "VISTA PREVIA DE IA";
     case "skill-picker": return "SELECCIONAR SKILLS";
   }
+  return "SUITE DE AGENTES";
 }
 
 export function modifyOptions(row: Pick<AgentCatalogRow, "membership"> & { fullBaseEditing?: boolean }): readonly string[] {
