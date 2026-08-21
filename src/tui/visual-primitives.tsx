@@ -6,7 +6,7 @@ import type { AgentCatalogRow } from "../core/types.ts";
 import type { AppScreen } from "./agent-suite-nav.ts";
 import { createVisualTokens } from "./visual-tokens.ts";
 
-export type VisualScreenKind = "landing" | "catalog" | "info" | "modify" | "model" | "effort" | "delete" | "create" | "coordinator" | "ai-gate" | "ai-interview" | "ai-preview" | "skill-picker" | "error";
+export type VisualScreenKind = "landing" | "catalog" | "info" | "modify" | "model" | "effort" | "delete" | "coordinator" | "ai-gate" | "ai-interview" | "ai-preview" | "skill-picker" | "error";
 
 export interface AgentInfoSection {
   title: string;
@@ -22,7 +22,6 @@ export function screenKeyHints(kind: VisualScreenKind, capability?: { canDelete?
     case "model":
     case "effort": return "↑↓ navega · Enter selecciona · Esc volver";
     case "delete": return "↑↓ elige · Enter confirma · Esc cancela";
-    case "create": return "Enter continúa · Esc volver";
     case "coordinator": return "↑↓ navega · Enter selecciona · Esc volver";
     case "ai-gate": return "Configurar ahora · Cancelar · Enter selecciona · Esc volver";
     case "ai-interview": return "↑↓ navega · Enter responde · Revisar propuesta · Esc cancelar";
@@ -33,7 +32,6 @@ export function screenKeyHints(kind: VisualScreenKind, capability?: { canDelete?
 }
 
 export function screenKeyHintsForScreen(screen: AppScreen): string {
-  if (screen.kind === "create" && screen.step === 5) return "Finalizar · Enter guarda · Esc volver";
   if (screen.kind === "modify" && screen.edit.mode === "menu") return "F10 Finalizar · ↑↓ navega · Enter selecciona · Esc volver";
   return screen.kind === "modify" && screen.edit?.mode !== undefined && screen.edit.mode !== "menu"
     ? "Enter guardar · Esc cancelar"

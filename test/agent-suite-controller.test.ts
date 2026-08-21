@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { describe, expect, it, vi } from "vitest";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAgentSuiteController } from "../src/tui/agent-suite-controller.ts";
@@ -25,7 +25,36 @@ describe("Agent Suite controller adapter", () => {
 
   it("supports explicit operation method names for every mutation", () => {
     const controller = createAgentSuiteController();
-    expect(Object.keys(controller)).toEqual(["snapshot", "refresh", "createAgent", "deleteAgent", "deactivateAgent", "reactivateAgent", "materialize", "setModel", "setEffort", "setSkills", "setOperations", "patchAgent", "operations", "coordinator", "setCoordinator"]);
+    expect(Object.keys(controller)).toEqual(["snapshot", "refresh", "createAgent", "deleteAgent", "deactivateAgent", "reactivateAgent", "materialize", "setModel", "setEffort", "setSkills", "setOperations", "patchAgent", "operations", "coordinator", "setCoordinator", "ingestPendingSkills"]);
+  });
+
+  it("ingests each pending skill through the existing safe installer after controller persistence", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agent-suite-controller-home-"));
+    const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
+    const controller = createAgentSuiteController([], "1.0.1", { path, home, seed: [], runtime: {} });
+
+    await controller.createAgent(draft);
+    await controller.ingestPendingSkills?.(draft.id, [{ id: "future-skill", rationale: "Needs approval." }]);
+
+    expect(existsSync(join(home, ".config", "opencode", "skills", "future-skill", "SKILL.md"))).toBe(true);
+    expect(controller.snapshot().rows.find((item) => item.id === draft.id)?.skills).toContain("future-skill");
+  });
+
+  it("skips the installer for an already-installed pending skill and only assigns it", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agent-suite-controller-home-"));
+    const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
+    const skillPath = join(home, ".config", "opencode", "skills", "future-skill", "SKILL.md");
+    mkdirSync(join(home, ".config", "opencode", "skills", "future-skill"), { recursive: true });
+    writeFileSync(skillPath, "installed skill");
+    const packageFactory = vi.fn();
+    const controller = createAgentSuiteController([], "1.0.1", { path, home, seed: [], runtime: {}, pendingSkillPackage: packageFactory });
+
+    await controller.createAgent(draft);
+    await controller.ingestPendingSkills?.(draft.id, [{ id: "future-skill", rationale: "Already present." }]);
+
+    expect(packageFactory).not.toHaveBeenCalled();
+    expect(readFileSync(skillPath, "utf8")).toBe("installed skill");
+    expect(controller.snapshot().rows.find((item) => item.id === draft.id)?.skills).toContain("future-skill");
   });
 
   it("builds the initial snapshot from persisted and runtime agents", () => {
@@ -80,6 +109,21 @@ describe("Agent Suite controller adapter", () => {
     expect(controller.snapshot().rows.some((row) => row.id === "old-agent")).toBe(false);
     expect(existsSync(globalAgentPath("old-agent", home))).toBe(false);
     expect(readFileSync(globalAgentPath("new-agent", home), "utf8")).toContain("name: new-agent");
+  });
+
+  it("persists one AI-assisted patch for description, skills, operations, model, and effort", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
+    const agent = { id: "review-agent", description: "Old", model: "openai/old", prompt: "Old operations", permissions: { read: "allow" as const }, skills: [] };
+    saveSuiteConfig(path, { version: 1, customAgents: { [agent.id]: agent }, modelAssignments: {}, variantAssignments: {} });
+    const controller = createAgentSuiteController([], "1.0.1", { path, runtime: { [agent.id]: { model: agent.model } } });
+
+    await controller.patchAgent(agent.id, { description: "Improved", skills: ["testing"], operations: "Review safely", model: "anthropic/sonnet", effort: "high" });
+
+    expect(loadSuiteConfig(path)).toMatchObject({
+      customAgents: { [agent.id]: { description: "Improved", skills: ["testing"], prompt: "Review safely" } },
+      modelAssignments: { [agent.id]: "anthropic/sonnet" },
+      variantAssignments: { [agent.id]: "high" },
+    });
   });
 
   it("rolls back persisted identity and materialized files when migration fails", async () => {
