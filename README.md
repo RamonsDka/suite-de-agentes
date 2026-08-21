@@ -36,7 +36,9 @@ Use absolute paths as shown; this matches the local TUI plugin installation used
 The Suite de Agentes window has exactly two options:
 
 1. **Catálogo** — browse the owned seed members (`general` and `agent-especialit-github`) and custom agents.
-2. **Crear agente** — keep the existing guided custom-agent workflow.
+2. **Crear agente** — start an adaptive AI interview that asks one focused question per turn, keeps a live safe-field checkpoint, and requires review before saving.
+
+The interview replays its in-memory transcript through fresh tool-less coordinator calls. You can answer with quick replies or free text, edit the six safe fields in review, request another interview turn, or discard without writing. Agent permissions remain product-owned; pending skills are ingested only after approval.
 
 The catalog is a native, scrollable OpenTUI selection. Each row opens Spanish details and state-aware actions. Custom rows can be materialized or removed; seed rows cannot be deleted. The sidebar and dialog titles show the plugin version (`v1.0.1`).
 
