@@ -10,8 +10,13 @@ export function createDraftFields(): readonly (keyof CreateDraft)[] {
   return CREATE_FIELDS;
 }
 
-export function createSubmissionAction(step: 0 | 1 | 2 | 3 | 4 | 5, canAuthor: boolean): "author" | "next" | "submit" {
-  return step === 5 ? "submit" : step === 3 && canAuthor ? "author" : "next";
+export function createDraftWithStepValue(draft: CreateDraft, step: 0 | 1 | 2 | 3 | 4 | 5, value: string): CreateDraft {
+  const field = CREATE_FIELDS[step];
+  return { ...draft, [field]: field === "skills" ? value.split(",").map((skill) => skill.trim()).filter(Boolean) : value };
+}
+
+export function createSubmissionAction(step: 0 | 1 | 2 | 3 | 4 | 5, _offerAuthoring = false): "next" | "submit" {
+  return step === 5 ? "submit" : "next";
 }
 
 export function validateCreateStep(draft: CreateDraft, step: 0 | 1 | 2 | 3 | 4 | 5, existingIds: readonly string[] = []): string | undefined {
@@ -38,15 +43,13 @@ export function validateCreateDraft(draft: CreateDraft, existingIds: readonly st
 export interface CreateAgentProps {
   theme: TuiTheme;
   draft: CreateDraft;
-  step: CreateDraft["id"] extends never ? never : 0 | 1 | 2 | 3 | 4 | 5;
+  step?: 0 | 1 | 2 | 3 | 4 | 5;
   focus: number;
   error?: string;
   onInput: (field: keyof CreateDraft, value: string | string[]) => void;
-  onNext: () => void;
-  onPrevious: () => void;
-  canAuthor?: boolean;
-  onAuthor?: () => void;
-  onSubmit: () => void;
+  onNext?: (draft: CreateDraft) => void;
+  onPrevious?: () => void;
+  onSubmit: (draft: CreateDraft) => void;
 }
 
 const LABELS: Record<keyof CreateDraft, string> = {
@@ -76,17 +79,25 @@ export function createStepPresentation(draft: CreateDraft, step: 0 | 1 | 2 | 3 |
 }
 
 export function CreateAgent(props: CreateAgentProps): JSX.Element {
-  const field = () => CREATE_FIELDS[props.step];
-  const presentation = () => createStepPresentation(props.draft, props.step);
-  const submit = (next: string) => props.onInput(field(), field() === "skills" ? next.split(",").map((skill) => skill.trim()).filter(Boolean) : next);
   return (
     <box flexDirection="column" gap={1}>
-      <SectionPanel theme={props.theme} title={presentation().heading}>
-        <FieldRow theme={props.theme} label="Campo" value={presentation().label} />
-        <input focused value={presentation().value} placeholder={presentation().label} onInput={submit} onSubmit={(next) => { if (typeof next === "string") submit(next); const action = createSubmissionAction(props.step, props.canAuthor === true); if (action === "author") props.onAuthor?.(); else if (action === "submit") props.onSubmit(); else props.onNext(); }} />
+      <SectionPanel theme={props.theme} title="Revisión manual del agente">
+        <text fg={props.theme.current.textMuted}>Edita los campos seguros antes de guardar. La configuración de permisos permanece bajo control del producto.</text>
+        {CREATE_FIELDS.map((field, index) => {
+          const value = field === "skills" ? props.draft.skills.join(", ") : props.draft[field];
+          return <box flexDirection="column" gap={1}>
+            <FieldRow theme={props.theme} label={LABELS[field]} value={value || "ninguno"} />
+            <input focused={props.focus === index} value={value} placeholder={LABELS[field]} onInput={(next) => props.onInput(field, field === "skills" ? (typeof next === "string" ? next.split(",").map((skill) => skill.trim()).filter(Boolean) : []) : typeof next === "string" ? next : value)} onSubmit={(next) => {
+              const submitted = typeof next === "string" ? next : value;
+              const submittedDraft = createDraftWithStepValue(props.draft, index as 0 | 1 | 2 | 3 | 4 | 5, submitted);
+              props.onInput(field, submittedDraft[field]);
+              props.onSubmit(submittedDraft);
+            }} />
+          </box>;
+        })}
       </SectionPanel>
       <Divider theme={props.theme} />
-      {props.step === 5 ? <StatusBadge theme={props.theme} status={editorSaveStatus(true).status}>{editorSaveStatus(true).label}</StatusBadge> : null}
+      <StatusBadge theme={props.theme} status={editorSaveStatus(true).status}>{editorSaveStatus(true).label}</StatusBadge>
       {props.error ? <StatusBadge theme={props.theme} status="error">{props.error}</StatusBadge> : null}
     </box>
   );

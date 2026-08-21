@@ -1,14 +1,11 @@
-# Assisted Agent Authoring Specification
+# Delta for Assisted Agent Authoring
 
-## Purpose
-
-Enable interactive conversational generation and refinement of agent definitions with mandatory preview, structured approval actions, and explicit finalization state.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Conversational Agent Generation and Refinement
 
 The system MUST allow users to author agents through an adaptive multi-turn AI interview and use the AI coordinator to progressively generate, refine, and checkpoint structured safe agent fields: `id`, `description`, `operations`, `skills`, `model`, and `effort`. Permissions and security settings MUST remain product-owned (`read: allow, edit: ask`) and MUST NOT be AI-authored.
+(Previously: The system allowed users to describe agent intent in plain language and used one-shot generation to generate or refine fields including `name`, `description`, `systemPrompt`, and `operations`)
 
 **User Story:** As a creator, I want to describe intent through an adaptive interview so that the coordinator creates agent capabilities and settings progressively.
 
@@ -33,6 +30,7 @@ The system MUST allow users to author agents through an adaptive multi-turn AI i
 ### Requirement: Mandatory Change Preview and Review Actions
 
 The system MUST NOT apply generated or refined agent attributes automatically. All proposed additions, modifications, or deletions MUST be presented in a structured preview offering direct editing of safe fields (`id`, `description`, `operations`, `skills`, `model`, `effort`) while keeping permissions and security settings product-owned (`read: allow, edit: ask`). The preview MUST offer three explicit actions: `Approve`, `Request changes`, and `Discard`.
+(Previously: Preview offered Approve, Request changes, and Discard without direct safe-field editing)
 
 **User Story:** As a creator, I want to inspect AI-generated changes in a structured preview and adjust safe fields directly so that I retain full control before applying edits.
 
@@ -61,26 +59,3 @@ The system MUST NOT apply generated or refined agent attributes automatically. A
 - GIVEN a generated agent preview is displayed
 - WHEN the user edits `id`, `description`, `operations`, `skills`, `model`, or `effort` directly
 - THEN the draft updates with the edited safe values while permissions remain product-owned
-
----
-
-### Requirement: Finalize Action and Save Status Display
-
-The system MUST provide a `Finalizar` action that validates required agent fields, persists the agent, and closes the editor. The interface MUST display a discreet save status near `Finalizar`: green `Cambios guardados` or yellow `Edición pendiente`. If an invalid edit is pending, `Finalizar` MUST remain blocked and display the validation blocker.
-
-**User Story:** As a user, I want clear save indicators and validated finalization so that I never lose work or persist invalid definitions.
-
-#### Acceptance & Edge Case Checklist
-- [ ] Displays `Cambios guardados` in green when saved, `Edición pendiente` in yellow when unsaved.
-- [ ] Blocks finalization when required fields are missing or invalid.
-- [ ] Validates, persists, and closes cleanly when `Finalizar` is triggered.
-
-#### Scenario: Finalize with pending valid edits
-- GIVEN valid unsaved edits exist and status shows `Edición pendiente`
-- WHEN the user triggers `Finalizar`
-- THEN all fields are validated, the agent is saved, and editor closes
-
-#### Scenario: Finalize blocked on invalid pending edits
-- GIVEN required agent fields are invalid or missing
-- WHEN the user triggers `Finalizar`
-- THEN finalization is blocked and a validation error is displayed
