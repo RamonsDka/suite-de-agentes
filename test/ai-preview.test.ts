@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { AI_PREVIEW_ACTIONS, authoringDraftPreview, editorSaveStatus } from "../src/tui/screens/ai-preview.tsx";
-import { finalizeCreateSubmission, finalizeModifyController, finalizeModifySubmission, runCreateAuthoring, shouldRequestAuthoring } from "../src/tui/agent-suite-app.tsx";
+import { finalizeCreateSubmission, finalizeModifyController, finalizeModifySubmission } from "../src/tui/agent-suite-app.tsx";
 import { initialNavState, reduceNav, type CreateDraft } from "../src/tui/agent-suite-nav.ts";
 
 const draft: CreateDraft = { id: "review-agent", description: "Reviews changes", skills: ["testing"], operations: "Review safely", model: "openai/gpt-5", effort: "high" };
@@ -14,16 +14,16 @@ describe("AI authoring preview", () => {
     ]));
   });
 
-  it("applies approved preview only to the active in-memory draft and restores it for changes or discard", () => {
-    const create = reduceNav(initialNavState(), { type: "CREATE_START" });
-    const preview = reduceNav(create, { type: "OPEN_AI_PREVIEW", draft });
+  it("keeps approval external and restores the interview for changes or discard", () => {
+    const interview = reduceNav(initialNavState(), { type: "CREATE_START", coordinatorConfigured: true });
+    const preview = reduceNav(interview, { type: "OPEN_AI_PREVIEW", draft });
     const approved = reduceNav(preview, { type: "AI_PREVIEW_APPROVE" });
     const requested = reduceNav(preview, { type: "AI_PREVIEW_REQUEST_CHANGES" });
     const discarded = reduceNav(preview, { type: "AI_PREVIEW_DISCARD" });
 
-    expect(approved.stack.at(-1)).toMatchObject({ kind: "create", draft, aiApproved: true });
-    expect(requested.stack.at(-1)).toMatchObject({ kind: "create", draft: { id: "" } });
-    expect(discarded.stack.at(-1)).toMatchObject({ kind: "create", draft: { id: "" } });
+    expect(approved.stack.at(-1)).toMatchObject({ kind: "ai-preview", draft });
+    expect(requested.stack.at(-1)).toMatchObject({ kind: "ai-interview" });
+    expect(discarded).toEqual(initialNavState());
   });
 
   it("finalizes only after controller persistence succeeds and reports saved or pending state", async () => {
@@ -36,7 +36,7 @@ describe("AI authoring preview", () => {
     await expect(finalizeCreateSubmission(controller, draft, dispatch, close)).resolves.toBeUndefined();
     expect(createAgent).toHaveBeenCalledWith(draft);
     expect(refresh).toHaveBeenCalledTimes(1);
-    expect(dispatch).toHaveBeenCalledWith({ type: "CREATE_SUBMIT" });
+    expect(dispatch).toHaveBeenCalledWith({ type: "AI_PREVIEW_APPLIED" });
     expect(close).toHaveBeenCalledTimes(1);
     expect(editorSaveStatus(false)).toEqual({ label: "Cambios guardados", status: "success" });
     expect(editorSaveStatus(true)).toEqual({ label: "Edición pendiente", status: "warning" });
@@ -66,32 +66,4 @@ describe("AI authoring preview", () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
-  it("runs configured conversational authoring into preview only, forwarding progress and leaving absent or cancelled paths manual", async () => {
-    const dispatch = vi.fn();
-    const progress = vi.fn();
-    const session = {
-      prompt: vi.fn(async (input: { onProgress?: (text: string) => void }) => {
-        input.onProgress?.("Generating draft");
-        return JSON.stringify({ id: "review-agent", description: "Reviews changes", systemPrompt: "Review safely.", operations: "Review safely", model: "openai/gpt-5", effort: "high", skills: ["testing"], permissions: { read: "allow" } });
-      }),
-    };
-
-    await expect(runCreateAuthoring(session, { provider: "openai", model: "gpt-5" }, { ...draft, id: "" }, new AbortController().signal, dispatch, progress)).resolves.toBeUndefined();
-    expect(progress).toHaveBeenCalledWith("Generating draft");
-    expect(dispatch).toHaveBeenCalledWith({ type: "OPEN_AI_PREVIEW", draft });
-
-    const cancelled = new AbortController();
-    cancelled.abort();
-    await expect(runCreateAuthoring(session, { provider: "openai", model: "gpt-5" }, draft, cancelled.signal, dispatch)).resolves.toMatch(/cancel/i);
-    await expect(runCreateAuthoring(undefined, undefined, draft, new AbortController().signal, dispatch)).resolves.toBeUndefined();
-    expect(dispatch).toHaveBeenCalledTimes(1);
-  });
-
-  it("offers the conversational action only after description and operations are collected, then fails open to manual completion", () => {
-    expect(shouldRequestAuthoring(true, false, false, 3)).toBe(true);
-    expect(shouldRequestAuthoring(true, false, false, 2)).toBe(false);
-    expect(shouldRequestAuthoring(true, true, false, 3)).toBe(false);
-    expect(shouldRequestAuthoring(true, false, true, 3)).toBe(false);
-    expect(shouldRequestAuthoring(false, false, false, 3)).toBe(false);
-  });
 });

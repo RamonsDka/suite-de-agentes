@@ -1,7 +1,7 @@
 import type { JSX } from "solid-js";
 import { ErrorBoundary } from "solid-js";
 import type { TuiDialogSelectOption, TuiTheme } from "@opencode-ai/plugin/tui";
-import type { AgentCatalogRow } from "../core/types.ts";
+import type { AgentCatalogRow, PendingSkill } from "../core/types.ts";
 import type { RuntimeCoordinatorProvider } from "./screens/coordinator-config.tsx";
 import type { AgentSuiteController } from "./agent-suite-controller.ts";
 import { AgentSuiteApp } from "./agent-suite-app.tsx";
@@ -33,6 +33,7 @@ export interface DialogMountApi {
   coordinatorProviders?: readonly RuntimeCoordinatorProvider[];
   installedSkills?: () => Promise<readonly SkillCandidate[]>;
   coordinatorSession?: CoordinatorSession;
+  ingestPendingSkills?: (agentId: string, pendingSkills: readonly PendingSkill[]) => Promise<void>;
   ui: {
     Dialog: (props: { size?: "medium" | "large" | "xlarge"; onClose: () => void; children?: JSX.Element }) => JSX.Element;
     dialog: { setSize: (size: "medium" | "large" | "xlarge") => void; replace: (render: () => JSX.Element, onClose?: () => void) => void; clear: () => void };
@@ -65,7 +66,7 @@ export function mountAgentSuite(api: DialogMountApi, controller: AgentSuiteContr
         unregisterEscapeHandler();
         unregisterEscapeHandler = registerAgentSuiteEscapeHandler(handler);
         return unregisterEscapeHandler;
-      }} modelOptions={api.modelOptions} variantOptions={api.variantOptions} coordinatorProviders={api.coordinatorProviders} installedSkills={api.installedSkills} coordinatorSession={api.coordinatorSession} />
+      }} modelOptions={api.modelOptions} variantOptions={api.variantOptions} coordinatorProviders={api.coordinatorProviders} installedSkills={api.installedSkills} coordinatorSession={api.coordinatorSession} ingestPendingSkills={api.ingestPendingSkills ?? controller.ingestPendingSkills} />
     </ErrorBoundary>
   ), closeOnce);
   api.ui.dialog.setSize(SUITE_DIALOG_SIZE);
