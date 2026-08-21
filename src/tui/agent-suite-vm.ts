@@ -28,26 +28,27 @@ export function screenTitle(screen: Pick<AppScreen, "kind"> & { disabled?: boole
     case "model": return "SELECCIONAR EL MODELO DE IA";
     case "effort": return "SELECCIONAR NIVEL DE ESFUERZO";
     case "delete": return "ADVERTENCIA";
-    case "create": return `CREAR AGENTE — v${PLUGIN_VERSION}`;
     case "coordinator": return "CONFIGURACIÓN DEL COORDINADOR";
     case "ai-gate": return "CONFIGURAR COORDINADOR";
+    case "ai-interview": return "ENTREVISTA DE AGENTE";
     case "ai-preview": return "VISTA PREVIA DE IA";
     case "skill-picker": return "SELECCIONAR SKILLS";
   }
+  return "SUITE DE AGENTES";
 }
 
 export function modifyOptions(row: Pick<AgentCatalogRow, "membership"> & { fullBaseEditing?: boolean }): readonly string[] {
   return row.membership === "custom"
-    ? ["Modificar nombre", "Descripción", "Skills", "Operaciones", "Modelo de IA", "Nivel de esfuerzo", "Eliminar", "Volver"]
-    : row.fullBaseEditing === true ? ["Descripción", "Skills", "Operaciones", "Modelo de IA", "Nivel de esfuerzo", "Volver"] : ["Modelo de IA", "Nivel de esfuerzo", "Volver"];
+    ? ["Asistente IA", "Modificar nombre", "Descripción", "Skills", "Operaciones", "Modelo de IA", "Nivel de esfuerzo", "Eliminar", "Volver"]
+    : row.fullBaseEditing === true ? ["Asistente IA", "Descripción", "Skills", "Operaciones", "Modelo de IA", "Nivel de esfuerzo", "Volver"] : ["Modelo de IA", "Nivel de esfuerzo", "Volver"];
 }
 
-export type EditorField = "id" | "description" | "skills" | "operations" | "model" | "effort" | "delete";
+export type EditorField = "ai" | "id" | "description" | "skills" | "operations" | "model" | "effort" | "delete";
 
 export function editorFields(row: Pick<AgentCatalogRow, "membership"> & { fullBaseEditing?: boolean }): readonly EditorField[] {
   return row.membership === "custom"
-    ? ["id", "description", "skills", "operations", "model", "effort", "delete"]
-    : row.fullBaseEditing === true ? ["description", "skills", "operations", "model", "effort"] : ["model", "effort"];
+    ? ["ai", "id", "description", "skills", "operations", "model", "effort", "delete"]
+    : row.fullBaseEditing === true ? ["ai", "description", "skills", "operations", "model", "effort"] : ["model", "effort"];
 }
 
 export function truncate(value: string, maxLength: number): string {

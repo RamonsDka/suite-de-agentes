@@ -24,6 +24,43 @@ export interface CoordinatorConfig {
   effort?: string;
 }
 
+export interface PendingSkill {
+  id: string;
+  rationale: string;
+}
+
+export interface ModelRecommendation {
+  model: string;
+  effort: string;
+  rationale: string;
+}
+
+export interface InterviewTurn {
+  question: string;
+  quickReplies: readonly string[];
+  checkpoint: InterviewCheckpoint;
+}
+
+export interface InterviewTranscriptEntry {
+  role: "user" | "assistant";
+  text: string;
+}
+
+export type InterviewTranscript = readonly InterviewTranscriptEntry[];
+
+export interface InterviewCheckpoint {
+  draft: {
+    id: string;
+    description: string;
+    operations: string;
+    model: string;
+    effort: string;
+    skills: string[];
+  };
+  pendingSkills: readonly PendingSkill[];
+  recommendation?: ModelRecommendation;
+}
+
 export interface SuiteConfig {
   version: 1;
   customAgents: Record<string, CustomAgent>;

@@ -2,10 +2,12 @@ import { randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { validateSkillId } from "./config.ts";
-import { validateSkillPackage, type IntegrationPlan } from "./skill-package.ts";
+import type { PendingSkill } from "./types.ts";
+import { buildIntegrationPlan, validateSkillPackage, type IntegrationPlan, type SkillPackage } from "./skill-package.ts";
 
 type JournalEntry = { path: string; bytes?: Buffer; mode?: number };
 export type SkillInstallOptions = { home?: string; approved?: boolean; auditPath?: string; validate?: () => Promise<void>; assign?: (agentId: string, skillId: string) => Promise<void> };
+export type PendingSkillPackageFactory = (skill: PendingSkill) => SkillPackage | Promise<SkillPackage>;
 
 export function globalSkillPath(id: string, home = process.env.HOME || process.env.USERPROFILE || "."): string { return join(home, ".config", "opencode", "skills", validateSkillId(id), "SKILL.md"); }
 
@@ -37,4 +39,34 @@ export async function installSkill(plan: IntegrationPlan, options: SkillInstallO
     await options.validate(); await options.assign(plan.agentId, pkg.id); audit(auditPath, home, plan, "success");
     return { path: globalSkillPath(pkg.id, home) };
   } catch (error) { restore(entries); try { audit(auditPath, home, plan, "failure"); } catch { /* Preserve the installation failure without logging sensitive content. */ } throw error; }
+}
+
+export function buildPendingSkillPackage(skill: PendingSkill): SkillPackage {
+  const id = validateSkillId(skill.id.trim());
+  const rationale = skill.rationale.trim() || `Generated capability for ${id}.`;
+  const description = rationale.replace(/\s+/g, " ").slice(0, 300) || `Generated capability for ${id}.`;
+  return {
+    id,
+    source: "generated",
+    files: [{
+      path: "SKILL.md",
+      content: `---\nname: ${id}\ndescription: ${description}\n---\n# ${id}\n\n${rationale}\n`,
+    }],
+  };
+}
+
+export async function installPendingSkill(
+  skill: PendingSkill,
+  agentId: string,
+  options: { home?: string; auditPath?: string; packageFactory?: PendingSkillPackageFactory; validate?: () => Promise<void>; assign?: (agentId: string, skillId: string) => Promise<void> } = {},
+): Promise<{ path: string }> {
+  const factory = options.packageFactory ?? buildPendingSkillPackage;
+  const plan = buildIntegrationPlan(await factory(skill), agentId);
+  return installSkill(plan, {
+    home: options.home,
+    auditPath: options.auditPath,
+    approved: true,
+    validate: options.validate ?? (async () => undefined),
+    assign: options.assign ?? (async () => undefined),
+  });
 }
