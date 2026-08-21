@@ -18,7 +18,8 @@ describe("Agent Suite modify panel", () => {
     const opened = reduceNav(info(seed.id), { type: "OPEN_MODIFY", agentId: seed.id });
     expect(opened.stack.at(-1)).toEqual({ kind: "modify", agentId: seed.id, focus: 0, edit: { mode: "menu" }, protectedBase: true });
     expect(modifyOptions(seed)).toEqual(["Modelo de IA", "Nivel de esfuerzo", "Volver"]);
-    expect(modifyOptions(custom)).toEqual(["Modificar nombre", "Descripción", "Skills", "Operaciones", "Modelo de IA", "Nivel de esfuerzo", "Eliminar", "Volver"]);
+    expect(modifyOptions(custom)).toEqual(["Asistente IA", "Modificar nombre", "Descripción", "Skills", "Operaciones", "Modelo de IA", "Nivel de esfuerzo", "Eliminar", "Volver"]);
+    expect(modifyOptionKey("Asistente IA")).toBe("ai");
     expect(modifyOptionKey("Modificar nombre")).toBe("id");
     expect(ModifyPanel).toBeTypeOf("function");
   });
@@ -29,7 +30,8 @@ describe("Agent Suite modify panel", () => {
       { label: "Nivel de esfuerzo", option: "effort", selected: true },
       { label: "Volver", option: "back", selected: false },
     ]);
-    expect(modifyMenuRows(custom, 3)).toEqual([
+    expect(modifyMenuRows(custom, 4)).toEqual([
+      { label: "Asistente IA", option: "ai", selected: false },
       { label: "Modificar nombre", option: "id", selected: false },
       { label: "Descripción", option: "description", selected: false },
       { label: "Skills", option: "skills", selected: false },
@@ -55,13 +57,14 @@ describe("Agent Suite modify panel", () => {
   });
 
   it("activates Delete as the final custom-editor field", () => {
-    const customMenu = { ...info(custom.id), stack: [...info(custom.id).stack, { kind: "modify" as const, agentId: custom.id, focus: 6, edit: { mode: "menu" as const }, editable: true }] };
-    expect(eventForKey({ name: "return" } as never, customMenu, 0, undefined, { modifyOptionCount: 7, isCustom: true })).toEqual({ type: "MODIFY_ACTIVATE", option: "delete" });
+    const customMenu = { ...info(custom.id), stack: [...info(custom.id).stack, { kind: "modify" as const, agentId: custom.id, focus: 7, edit: { mode: "menu" as const }, editable: true }] };
+    expect(eventForKey({ name: "return" } as never, customMenu, 0, undefined, { modifyOptionCount: 8, isCustom: true })).toEqual({ type: "MODIFY_ACTIVATE", option: "delete" });
   });
 
   it("renders one membership-scoped editor with Delete last for custom agents", () => {
     expect(editorMenuRows(custom, "Review safely", 0)).toEqual([
-      { field: "id", label: "Modificar nombre", value: "custom", selected: true },
+      { field: "ai", label: "Asistente IA", value: "Mejorar descripción, skills y operaciones", selected: true },
+      { field: "id", label: "Modificar nombre", value: "custom", selected: false },
       { field: "description", label: "Descripción", value: "sin descripción", selected: false },
       { field: "skills", label: "Skills", value: "testing", selected: false },
       { field: "operations", label: "Operaciones", value: "Review safely", selected: false },
@@ -69,7 +72,8 @@ describe("Agent Suite modify panel", () => {
       { field: "effort", label: "Nivel de esfuerzo", value: "predeterminado", selected: false },
       { field: "delete", label: "Eliminar", value: "", selected: false },
     ]);
-    expect(editorMenuRows(seed, "", 1, true)).toEqual([
+    expect(editorMenuRows(seed, "", 2, true)).toEqual([
+      { field: "ai", label: "Asistente IA", value: "Mejorar descripción, skills y operaciones", selected: false },
       { field: "description", label: "Descripción", value: "sin descripción", selected: false },
       { field: "skills", label: "Skills", value: "ninguna", selected: true },
       { field: "operations", label: "Operaciones", value: "ninguna", selected: false },
@@ -80,13 +84,13 @@ describe("Agent Suite modify panel", () => {
 
   it("routes description, skills, and operations for the protected base editor", () => {
     const menu = reduceNav(info(seed.id), { type: "OPEN_MODIFY", agentId: seed.id });
-    const description = { ...menu, stack: [...menu.stack.slice(0, -1), { ...(menu.stack.at(-1) as Extract<NavState["stack"][number], { kind: "modify" }>), focus: 0 }] };
-    const skills = { ...description, stack: [...description.stack.slice(0, -1), { ...(description.stack.at(-1) as Extract<NavState["stack"][number], { kind: "modify" }>), focus: 1 }] };
-    const operations = { ...description, stack: [...description.stack.slice(0, -1), { ...(description.stack.at(-1) as Extract<NavState["stack"][number], { kind: "modify" }>), focus: 2 }] };
+    const description = { ...menu, stack: [...menu.stack.slice(0, -1), { ...(menu.stack.at(-1) as Extract<NavState["stack"][number], { kind: "modify" }>), focus: 1 }] };
+    const skills = { ...description, stack: [...description.stack.slice(0, -1), { ...(description.stack.at(-1) as Extract<NavState["stack"][number], { kind: "modify" }>), focus: 2 }] };
+    const operations = { ...description, stack: [...description.stack.slice(0, -1), { ...(description.stack.at(-1) as Extract<NavState["stack"][number], { kind: "modify" }>), focus: 3 }] };
 
-    expect(eventForKey({ name: "return" } as never, description, 0, undefined, { modifyOptionCount: 5, isCustom: false })).toEqual({ type: "MODIFY_ACTIVATE", option: "description" });
-    expect(eventForKey({ name: "return" } as never, skills, 0, undefined, { modifyOptionCount: 5, isCustom: false })).toEqual({ type: "MODIFY_ACTIVATE", option: "skills" });
-    expect(eventForKey({ name: "return" } as never, operations, 0, undefined, { modifyOptionCount: 5, isCustom: false })).toEqual({ type: "MODIFY_ACTIVATE", option: "operations" });
+    expect(eventForKey({ name: "return" } as never, description, 0, undefined, { modifyOptionCount: 6, isCustom: false })).toEqual({ type: "MODIFY_ACTIVATE", option: "description" });
+    expect(eventForKey({ name: "return" } as never, skills, 0, undefined, { modifyOptionCount: 6, isCustom: false })).toEqual({ type: "MODIFY_ACTIVATE", option: "skills" });
+    expect(eventForKey({ name: "return" } as never, operations, 0, undefined, { modifyOptionCount: 6, isCustom: false })).toEqual({ type: "MODIFY_ACTIVATE", option: "operations" });
   });
 
   it("validates and deduplicates visible skill additions with Spanish errors", () => {
