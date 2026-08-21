@@ -2,10 +2,12 @@ import type { AgentCatalogRow, CoordinatorConfig, CustomAgent, SuiteConfig } fro
 import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { buildSuiteDeAgentesCatalog, SUITE_DE_AGENTES_SEED } from "../core/suites.ts";
-import { patchBaseAgent, patchCustomAgent, setAgentModelAssignment, type AgentPatch } from "../core/config.ts";
+import { patchBaseAgent, patchCustomAgent, setAgentModelAssignment, validateSkillId, type AgentPatch } from "../core/config.ts";
 import { loadSuiteConfig, saveSuiteConfig } from "../core/persistence.ts";
+import { buildPendingSkillPackage, globalSkillPath, installPendingSkill, type PendingSkillPackageFactory } from "../core/skill-install.ts";
 import { globalAgentPath, materializeGlobalAgent, renameMaterializedAgentResult } from "../core/agents.ts";
 import type { CreateDraft } from "./agent-suite-nav.ts";
+import type { PendingSkill } from "../core/types.ts";
 
 export interface AgentSuiteController {
   snapshot(): { rows: AgentCatalogRow[]; disabledRows?: AgentCatalogRow[]; version: string };
@@ -23,6 +25,7 @@ export interface AgentSuiteController {
   operations?(id: string): string | undefined;
   coordinator?(): CoordinatorConfig | undefined;
   setCoordinator?(coordinator: CoordinatorConfig): Promise<void>;
+  ingestPendingSkills?(agentId: string, pendingSkills: readonly PendingSkill[]): Promise<void>;
 }
 
 type ControllerOptions = {
@@ -31,6 +34,7 @@ type ControllerOptions = {
   custom?: Record<string, CustomAgent>;
   seed?: readonly string[];
   home?: string;
+  pendingSkillPackage?: PendingSkillPackageFactory;
 };
 
 export function createAgentSuiteController(
@@ -61,11 +65,58 @@ export function createAgentSuiteController(
   const persist = () => { if (options.path) saveSuiteConfig(options.path, config); };
   const find = (id: string) => currentRows.find((row) => row.id === id);
   const mutation = async (operation: () => void) => { operation(); persist(); rebuild(); };
+  const pendingSkillPackage = options.pendingSkillPackage ?? buildPendingSkillPackage;
+  const assignedSkills = (id: string): string[] => config.customAgents[id]?.skills
+    ? [...config.customAgents[id].skills]
+    : [...(config.baseOverrides?.[id]?.skills ?? find(id)?.skills ?? [])];
+  const assignPendingSkill = (agentId: string, skillId: string): void => {
+    const skills = [...new Set([...assignedSkills(agentId), skillId])];
+    if (config.customAgents[agentId]) config.customAgents[agentId].skills = skills;
+    else if (seed.includes(agentId)) config = { ...config, baseOverrides: { ...(config.baseOverrides ?? {}), [agentId]: { ...(config.baseOverrides?.[agentId] ?? {}), skills } } };
+    else throw new Error(`Unknown agent: ${agentId}`);
+  };
+  const ingestPendingSkills = async (agentId: string, pendingSkills: readonly PendingSkill[]): Promise<void> => {
+    const prior = structuredClone(config);
+    try {
+      for (const pending of pendingSkills) {
+        const skillId = validateSkillId(pending.id.trim());
+        if (assignedSkills(agentId).includes(skillId)) continue;
+        if (!existsSync(globalSkillPath(skillId, options.home))) {
+          await installPendingSkill(pending, agentId, {
+            home: options.home,
+            packageFactory: pendingSkillPackage,
+            validate: async () => {
+              if (!existsSync(globalSkillPath(skillId, options.home))) throw new Error(`Skill installation did not produce ${skillId}.`);
+            },
+            assign: async (_target, installedSkillId) => {
+              assignPendingSkill(agentId, installedSkillId);
+              persist();
+              rebuild();
+            },
+          });
+        } else {
+          assignPendingSkill(agentId, skillId);
+          persist();
+          rebuild();
+        }
+      }
+    } catch (error) {
+      config = prior;
+      try { persist(); } finally { rebuild(); }
+      throw error;
+    }
+  };
   const patchAgent = async (id: string, patch: AgentPatch) => {
     const prior = structuredClone(config);
-    const patched = seed.includes(id)
+    let patched = seed.includes(id)
       ? patchBaseAgent(config, id, patch)
       : patchCustomAgent(config, id, patch);
+    if (patch.model !== undefined || patch.effort !== undefined) {
+      const targetId = patch.newId ?? id;
+      const model = patch.model ?? patched.modelAssignments[targetId] ?? find(id)?.model;
+      if (!model) throw new Error(`Agent '${id}' requires a model before effort can be assigned.`);
+      patched = setAgentModelAssignment(patched, targetId, model, patch.effort === undefined ? patched.variantAssignments[targetId] : patch.effort || undefined);
+    }
     let migration: { oldId: string; newId: string; oldPath: string; newPath: string; bytes?: Buffer; mode?: number; migrated: boolean } | undefined;
     if (patch.newId !== undefined && patch.newId !== id) {
       const oldPath = globalAgentPath(id, options.home);
@@ -175,5 +226,6 @@ export function createAgentSuiteController(
     operations: (id) => config.customAgents[id]?.prompt ?? config.baseOverrides?.[id]?.operations,
     coordinator: () => config.coordinator && { ...config.coordinator },
     setCoordinator: async (coordinator) => mutation(() => { config = { ...config, coordinator: { ...coordinator } }; }),
+    ingestPendingSkills,
   };
 }

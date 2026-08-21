@@ -51,7 +51,7 @@ describe("visual primitives", () => {
   });
 
   it("presents finalization and focused search with their semantic visual treatments", () => {
-    const finalHint = screenKeyHintsForScreen({ kind: "create", step: 5 } as never);
+    const finalHint = screenKeyHintsForScreen({ kind: "modify", agentId: "custom-agent", focus: 0, edit: { mode: "menu" } });
     const search = searchInputPresentation({ current } as never, true);
 
     expect(finalHint).toContain("Finalizar");
