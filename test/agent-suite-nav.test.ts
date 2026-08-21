@@ -178,14 +178,14 @@ describe("Agent Suite navigation", () => {
     expect(pageRows(Array.from({ length: 8 }, (_, index) => index), 1)).toEqual([6, 7]);
     expect(MAX_VISIBLE_ROWS).toBe(6);
     expect(modifyOptions(seed)).toEqual(["Modelo de IA", "Nivel de esfuerzo", "Volver"]);
-    expect(modifyOptions({ ...seed, fullBaseEditing: true })).toEqual(["Descripción", "Skills", "Operaciones", "Modelo de IA", "Nivel de esfuerzo", "Volver"]);
-    expect(modifyOptions(custom)).toEqual(["Modificar nombre", "Descripción", "Skills", "Operaciones", "Modelo de IA", "Nivel de esfuerzo", "Eliminar", "Volver"]);
+    expect(modifyOptions({ ...seed, fullBaseEditing: true })).toEqual(["Asistente IA", "Descripción", "Skills", "Operaciones", "Modelo de IA", "Nivel de esfuerzo", "Volver"]);
+    expect(modifyOptions(custom)).toEqual(["Asistente IA", "Modificar nombre", "Descripción", "Skills", "Operaciones", "Modelo de IA", "Nivel de esfuerzo", "Eliminar", "Volver"]);
   });
 
   it("defines deterministic membership-scoped editor fields", () => {
-    expect(editorFields(custom)).toEqual(["id", "description", "skills", "operations", "model", "effort", "delete"]);
+    expect(editorFields(custom)).toEqual(["ai", "id", "description", "skills", "operations", "model", "effort", "delete"]);
     expect(editorFields(seed)).toEqual(["model", "effort"]);
-    expect(editorFields({ ...seed, fullBaseEditing: true })).toEqual(["description", "skills", "operations", "model", "effort"]);
+    expect(editorFields({ ...seed, fullBaseEditing: true })).toEqual(["ai", "description", "skills", "operations", "model", "effort"]);
   });
 
   it("bounds editor-menu focus to the final permitted field", () => {
@@ -196,8 +196,8 @@ describe("Agent Suite navigation", () => {
       seedMenu = reduceNav(seedMenu, { type: "MOVE_FOCUS", delta: 1 });
     }
 
-    expect(customMenu.stack.at(-1)).toMatchObject({ kind: "modify", focus: 6 });
-    expect(seedMenu.stack.at(-1)).toMatchObject({ kind: "modify", focus: 4 });
+    expect(customMenu.stack.at(-1)).toMatchObject({ kind: "modify", focus: 7 });
+    expect(seedMenu.stack.at(-1)).toMatchObject({ kind: "modify", focus: 5 });
   });
 
   it("stages text and skills drafts without leaking mutable source values", () => {

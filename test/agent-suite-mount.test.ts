@@ -1,10 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
+import { existsSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { handleAgentSuiteEscape, mountAgentSuite, registerAgentSuiteEscapeHandler, SUITE_DIALOG_SIZE, type DialogMountApi } from "../src/tui/agent-suite-mount.tsx";
 import { createAgentSuiteController } from "../src/tui/agent-suite-controller.ts";
 import { openAgentSuite, tui } from "../src/tui/index.tsx";
 import { SUITE_SHELL_BODY_LAYOUT, SUITE_SHELL_HEADER_LAYOUT, SUITE_SHELL_KEYBAR_LAYOUT, SUITE_SHELL_LAYOUT } from "../src/tui/screens/suite-shell.tsx";
 
-vi.mock("../src/tui/agent-suite-app.tsx", () => ({ AgentSuiteApp: () => "agent-suite-content" as never }));
+const mountedApp = vi.hoisted(() => ({ props: undefined as Record<string, unknown> | undefined }));
+vi.mock("../src/tui/agent-suite-app.tsx", () => ({ AgentSuiteApp: (props: Record<string, unknown>) => { mountedApp.props = props; return "agent-suite-content" as never; } }));
 vi.mock("solid-js", async () => {
   const actual = await vi.importActual<typeof import("solid-js")>("solid-js");
   return { ...actual, ErrorBoundary: (props: { children?: unknown }) => props.children };
@@ -111,6 +115,35 @@ describe("Agent Suite dialog mount", () => {
     expect(handleAgentSuiteEscape()).toBe(false);
     mounted.requestClose();
     expect(handleAgentSuiteEscape()).toBe(false);
+  });
+
+  it("mounts the controller-owned pending-skill ingestor into the live app props", () => {
+    const controller = createAgentSuiteController();
+    const api: DialogMountApi = {
+      theme: {} as never,
+      ui: { Dialog: () => null, dialog: { setSize: vi.fn(), replace: vi.fn((render) => { render(); }), clear: vi.fn() } },
+    };
+
+    mountAgentSuite(api, controller);
+
+    expect(mountedApp.props?.ingestPendingSkills).toBe(controller.ingestPendingSkills);
+  });
+
+  it("runs the mounted pending-skill callback through the controller's safe installer", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agent-suite-mount-home-"));
+    const path = join(mkdtempSync(join(tmpdir(), "agent-suite-mount-config-")), "suites.json");
+    const controller = createAgentSuiteController([], "1.0.1", { path, home, seed: [], runtime: {} });
+    const api: DialogMountApi = {
+      theme: {} as never,
+      ui: { Dialog: () => null, dialog: { setSize: vi.fn(), replace: vi.fn((render) => { render(); }), clear: vi.fn() } },
+    };
+
+    mountAgentSuite(api, controller);
+    await controller.createAgent({ id: "mounted-agent", description: "Mounted", skills: [], operations: "Review", model: "openai/gpt-5", effort: "high" });
+    await (mountedApp.props?.ingestPendingSkills as (agentId: string, pendingSkills: readonly { id: string; rationale: string }[]) => Promise<void>)("mounted-agent", [{ id: "mounted-skill", rationale: "Mounted safe ingestion." }]);
+
+    expect(existsSync(join(home, ".config", "opencode", "skills", "mounted-skill", "SKILL.md"))).toBe(true);
+    expect(controller.snapshot().rows.find((row) => row.id === "mounted-agent")?.skills).toContain("mounted-skill");
   });
 
 });

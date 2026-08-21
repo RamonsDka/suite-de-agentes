@@ -10,6 +10,8 @@ export interface AgentPatch {
   description?: string;
   skills?: string[];
   operations?: string;
+  model?: string;
+  effort?: string;
 }
 
 const PROTECTED_KEYS = new Set(["__proto__", "constructor", "prototype"]);

@@ -27,10 +27,10 @@ export interface ModifyPanelProps {
   protectedBase?: boolean;
 }
 
-export type ModifyOption = "id" | "description" | "model" | "effort" | "skills" | "operations" | "delete" | "back";
+export type ModifyOption = "ai" | "id" | "description" | "model" | "effort" | "skills" | "operations" | "delete" | "back";
 
 export function modifyOptionKey(label: string): ModifyOption | undefined {
-  const labels: Record<string, ModifyOption> = { "Modificar nombre": "id", Nombre: "id", Identificador: "id", Descripción: "description", "Modelo de IA": "model", "Nivel de esfuerzo": "effort", Skills: "skills", Operaciones: "operations", Eliminar: "delete", Volver: "back" };
+  const labels: Record<string, ModifyOption> = { "Asistente IA": "ai", "Modificar nombre": "id", Nombre: "id", Identificador: "id", Descripción: "description", "Modelo de IA": "model", "Nivel de esfuerzo": "effort", Skills: "skills", Operaciones: "operations", Eliminar: "delete", Volver: "back" };
   return labels[label];
 }
 
@@ -45,6 +45,7 @@ export function modifyMenuRows(row: Pick<AgentCatalogRow, "membership">, focus: 
 }
 
 const EDITOR_LABELS: Record<EditorField, string> = {
+  ai: "Asistente IA",
   id: "Modificar nombre",
   description: "Descripción",
   skills: "Skills",
@@ -66,6 +67,7 @@ export function editorMenuRows(row: AgentCatalogRow, operations: string, focus: 
     field,
     label: EDITOR_LABELS[field],
     value: field === "id" ? row.id
+      : field === "ai" ? "Mejorar descripción, skills y operaciones"
       : field === "description" ? row.description || "sin descripción"
         : field === "skills" ? row.skills.join(", ") || "ninguna"
           : field === "operations" ? operations || "ninguna"
@@ -154,9 +156,9 @@ export function ModifyPanel(props: ModifyPanelProps): JSX.Element {
           key.stopPropagation();
           props.onCancel?.();
          }} onInput={(value) => syncDraftInput(value, setTextDraft)} onSubmit={(value) => {
-         const submitted = typeof value === "string" ? value : undefined;
-         props.onCommit?.(submitted);
-       }} />
+          const submitted = typeof value === "string" ? value : undefined;
+          props.onCommit?.(submitted);
+        }} />
       </SectionPanel>
       {props.busy ? <StatusBadge theme={props.theme} status="info">Guardando cambios…</StatusBadge> : null}
       {props.error ? <StatusBadge theme={props.theme} status="error">{props.error}</StatusBadge> : null}

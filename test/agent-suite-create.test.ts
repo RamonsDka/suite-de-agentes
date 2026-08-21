@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { initialNavState, reduceNav } from "../src/tui/agent-suite-nav.ts";
+import { reduceNav, type NavState } from "../src/tui/agent-suite-nav.ts";
+import { eventForKey } from "../src/tui/agent-suite-app.tsx";
+import type { KeyEvent } from "@opencode-ai/plugin/tui";
 import { applyCreateSubmission } from "../src/tui/agent-suite-app.tsx";
-import { createDraftFields, createStepPresentation, createSubmissionAction, validateCreateDraft, validateCreateStep } from "../src/tui/screens/create-agent.tsx";
+import { createDraftFields, createDraftWithStepValue, createStepPresentation, createSubmissionAction, validateCreateDraft, validateCreateStep } from "../src/tui/screens/create-agent.tsx";
 import type { CreateDraft } from "../src/tui/agent-suite-nav.ts";
 import { createAgentSuiteController } from "../src/tui/agent-suite-controller.ts";
 import type { AgentSuiteController } from "../src/tui/agent-suite-controller.ts";
@@ -35,7 +37,7 @@ function controller(): AgentSuiteController & { calls: string[]; submitted?: Cre
 }
 
 describe("Agent Suite create agent", () => {
-  it("persists the complete approved draft exactly once", async () => {
+  it("retains the controller-backed atomic create helper for compatibility consumers", async () => {
     const fake = controller();
     const dispatch = vi.fn();
     const error = await applyCreateSubmission(fake, draft, dispatch);
@@ -45,7 +47,7 @@ describe("Agent Suite create agent", () => {
     expect(fake.submitted).toEqual(draft);
     expect(fake.calls).not.toContain("skills");
     expect(fake.calls).not.toContain("operations");
-    expect(dispatch).toHaveBeenCalledWith({ type: "CREATE_SUBMIT" });
+    expect(dispatch).toHaveBeenCalledWith({ type: "AI_PREVIEW_APPLIED" });
   });
 
   it("trims a valid padded id before persisting the draft", async () => {
@@ -67,9 +69,19 @@ describe("Agent Suite create agent", () => {
     expect(validateCreateDraft(draft, [draft.id])).toBe("El identificador ya existe.");
   });
 
-  it("routes creation to the interview or coordinator gate instead of the wizard", () => {
-    expect(reduceNav(initialNavState(), { type: "CREATE_START", coordinatorConfigured: true }).stack.at(-1)).toMatchObject({ kind: "ai-interview" });
-    expect(reduceNav(initialNavState(), { type: "CREATE_START", coordinatorConfigured: false }).stack.at(-1)).toMatchObject({ kind: "ai-gate" });
+  it("keeps the user-facing entry owned by the interview route", () => {
+    const state = reduceNav({ stack: [{ kind: "landing", focus: 0 }], busy: false, closing: false }, { type: "CREATE_START", coordinatorConfigured: true });
+    expect(state.stack.at(-1)).toMatchObject({ kind: "ai-interview" });
+  });
+
+  it("validates a manual draft before handing it to the controller", () => {
+    expect(validateCreateDraft({ ...draft, id: "" })).toBe("El identificador es obligatorio.");
+  });
+
+  it("uses the manual review action for every field instead of an AI branch", () => {
+    expect(createSubmissionAction(0, true)).toBe("next");
+    expect(createSubmissionAction(3, true)).toBe("next");
+    expect(createSubmissionAction(5, true)).toBe("submit");
   });
 
   it("describes each wizard step with the preserved field value", () => {
@@ -85,8 +97,8 @@ describe("Agent Suite create agent", () => {
     });
   });
 
-  it("requests configured authoring after operations while retaining manual progression otherwise", () => {
-    expect(createSubmissionAction(3, true)).toBe("author");
+  it("keeps the manual editor on field progression without an AI submission branch", () => {
+    expect(createSubmissionAction(3, true)).toBe("next");
     expect(createSubmissionAction(3, false)).toBe("next");
     expect(createSubmissionAction(5, true)).toBe("submit");
   });

@@ -37,7 +37,6 @@ export type AppScreen =
   | { kind: "effort"; agentId: string; focus: number }
   | { kind: "modify"; agentId: string; focus: number; edit: ModifyEdit; editable?: boolean; protectedBase?: boolean }
   | { kind: "delete"; agentId: string; confirmFocus: 0 | 1 }
-  | { kind: "create"; step: 0 | 1 | 2 | 3 | 4 | 5; draft: CreateDraft; focus: number; aiApproved?: boolean }
   | { kind: "ai-interview"; focus: number; request?: InterviewRequest }
   | { kind: "coordinator"; stage: CoordinatorStage; focus: number; provider?: string; model?: string; returnIntent?: AiIntent }
   | { kind: "ai-gate"; intent: AiIntent; focus: 0 | 1; request?: InterviewRequest }
@@ -76,7 +75,7 @@ export type NavEvent =
   | { type: "OPEN_MODIFY"; agentId?: string; custom?: boolean }
   | { type: "DEACTIVATE_AGENT"; agentId: string }
   | { type: "REACTIVATE_AGENT"; agentId: string }
-  | { type: "MODIFY_ACTIVATE"; option: "id" | "description" | "model" | "effort" | "skills" | "operations" | "delete" | "back"; skills?: string[]; operations?: string; value?: string }
+  | { type: "MODIFY_ACTIVATE"; option: "ai" | "id" | "description" | "model" | "effort" | "skills" | "operations" | "delete" | "back"; skills?: string[]; operations?: string; value?: string }
   | { type: "SELECT_MODEL"; model: string }
   | { type: "SELECT_EFFORT"; effort: string }
   | { type: "EDIT_SKILLS_TOGGLE"; index: number; skill?: string }
@@ -94,10 +93,6 @@ export type NavEvent =
   | { type: "CONFIRM_DELETE" }
   | { type: "CANCEL_DELETE" }
   | { type: "CREATE_START"; coordinatorConfigured?: boolean }
-  | { type: "CREATE_INPUT"; field: keyof CreateDraft; value: string | string[] }
-  | { type: "CREATE_NEXT" }
-  | { type: "CREATE_PREV" }
-  | { type: "CREATE_SUBMIT" }
   | { type: "INTERVIEW_QUICK_REPLY"; reply: string }
   | { type: "INTERVIEW_INPUT"; value: string }
   | { type: "INTERVIEW_SUBMIT"; value?: string }
@@ -186,11 +181,6 @@ function modifyMaxFocus(screen: Extract<AppScreen, { kind: "modify" }>): number 
 
 function skillDraft(skills: string[], focus = 0, adding = false, input = ""): Extract<ModifyEdit, { mode: "skills" }> {
   return { mode: "skills", skills: [...skills], selected: [...skills], focus, adding, input };
-}
-
-function stepCreate(screen: Extract<AppScreen, { kind: "create" }>, delta: -1 | 1): Extract<AppScreen, { kind: "create" }> {
-  const step = Math.max(0, Math.min(5, screen.step + delta)) as Extract<AppScreen, { kind: "create" }>["step"];
-  return { ...screen, step };
 }
 
 function cloneInterviewRequest(request: InterviewRequest): InterviewRequest {
@@ -315,6 +305,7 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
         : { kind: "modify", agentId: event.agentId ?? screen.agentId, focus: 0, edit: { mode: "menu" }, protectedBase: true });
     case "MODIFY_ACTIVATE":
       if (screen.kind !== "modify" || screen.edit.mode !== "menu") return state;
+      if (event.option === "ai") return state;
       if (event.option === "model") return push(state, { kind: "model", agentId: screen.agentId, focus: 0 });
       if (event.option === "effort") return push(state, { kind: "effort", agentId: screen.agentId, focus: 0 });
       if (screen.editable !== true && screen.protectedBase !== true && event.option !== "back") return state;
@@ -383,18 +374,9 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
       return screen.kind === "delete" ? pop(state) : state;
     case "CREATE_START":
       return push(state, event.coordinatorConfigured === true ? interviewScreen() : { kind: "ai-gate", intent: "agent-creation-interview", focus: 0 });
-    case "CREATE_INPUT":
-      return screen.kind === "create" ? replaceTop(state, { ...screen, draft: { ...screen.draft, [event.field]: event.field === "skills" && typeof event.value === "string" ? [event.value] : event.value } }) : state;
-    case "CREATE_NEXT":
-      return screen.kind === "create" ? replaceTop(state, stepCreate(screen, 1)) : state;
-    case "CREATE_PREV":
-      return screen.kind === "create" ? replaceTop(state, stepCreate(screen, -1)) : state;
-    case "CREATE_SUBMIT":
-      return screen.kind === "create" ? replaceTop(state, { kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false }) : state;
     case "BACK":
       if (screen.kind === "modify" && screen.edit.mode !== "menu") return replaceTop(state, { ...screen, edit: { mode: "menu" } });
       if (screen.kind === "ai-interview") return pop(state);
-      if (screen.kind === "create" && screen.step > 0) return replaceTop(state, stepCreate(screen, -1));
       return pop(state);
     default:
       return state;
