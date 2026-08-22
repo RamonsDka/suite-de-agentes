@@ -51,7 +51,10 @@ export function buildAgentModelOptions(row: AgentCatalogRow, options: readonly {
 }
 
 export function buildRuntimeModelOptions(api: TuiPluginApi): TuiDialogSelectOption<string>[] {
-  return api.state.provider.flatMap((provider) => Object.entries(provider.models).map(([id, model]) => ({ title: model.name, value: `${provider.id}/${id}`, description: provider.name })));
+  return api.state.provider.flatMap((provider) => Object.entries(provider.models).flatMap(([key, model]) => {
+    const modelId = stableRuntimeModelId(provider.id, key, model);
+    return modelId ? [{ title: model.name, value: `${provider.id}/${modelId}`, description: provider.name }] : [];
+  }));
 }
 
 export function buildAgentVariantOptions(row: AgentCatalogRow, selectedModel: string, variants: readonly string[]): TuiDialogSelectOption<string>[] {
@@ -62,7 +65,8 @@ export function getAvailableModelVariants(api: TuiPluginApi, modelID: string): s
   const separator = modelID.indexOf("/");
   if (separator <= 0) return [];
   const provider = api.state.provider.find((item) => item.id === modelID.slice(0, separator));
-  const model = provider?.models[modelID.slice(separator + 1)] as { variants?: Record<string, unknown> } | undefined;
+  const requestedModelId = modelID.slice(separator + 1);
+  const model = Object.entries(provider?.models ?? {}).find(([key, candidate]) => stableRuntimeModelId(provider!.id, key, candidate) === requestedModelId)?.[1] as { variants?: Record<string, unknown> } | undefined;
   return Object.entries(model?.variants ?? {}).flatMap(([id, metadata]) => {
     try { validateVariantId(id); } catch { return []; }
     return metadata && typeof metadata === "object" && (metadata as { disabled?: boolean }).disabled ? [] : [id];
@@ -70,7 +74,23 @@ export function getAvailableModelVariants(api: TuiPluginApi, modelID: string): s
 }
 
 export function buildRuntimeModelProviders(api: TuiPluginApi): RuntimeModelProvider[] {
-  return api.state.provider.map((provider) => ({ id: provider.id, name: provider.name, models: Object.fromEntries(Object.entries(provider.models).map(([id, model]) => [id, { id, name: model.name, variants: (model as { variants?: Record<string, unknown> }).variants }])) }));
+  return api.state.provider.map((provider) => ({
+    id: provider.id,
+    name: provider.name,
+    models: Object.fromEntries(Object.entries(provider.models).flatMap(([key, model]) => {
+      const modelId = stableRuntimeModelId(provider.id, key, model);
+      return modelId ? [[modelId, { id: modelId, name: model.name, variants: (model as { variants?: Record<string, unknown> }).variants }]] : [];
+    })),
+  }));
+}
+
+function stableRuntimeModelId(providerId: string, key: string, model: { id?: string }): string | undefined {
+  for (const candidate of [model.id, key]) {
+    if (typeof candidate !== "string" || !candidate.trim() || /\s/.test(candidate)) continue;
+    const normalized = candidate.includes("/") ? candidate.slice(candidate.indexOf("/") + 1) : candidate;
+    if (normalized && !/\s/.test(normalized) && !normalized.includes("/")) return normalized;
+  }
+  return undefined;
 }
 
 export type SuiteOpenFallback = () => void;

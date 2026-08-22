@@ -189,7 +189,7 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
         if (current.kind === "provider") return <ProviderSelect theme={props.theme} providers={props.providers} focus={current.focus} onSelect={(provider) => dispatch({ type: "SELECT_PROVIDER", provider })} />;
         if (current.kind === "model") {
           const options = providerModelOptions(props.providers, current.provider);
-          return <ModelSelect theme={props.theme} row={row} models={options.map((option) => option.value)} modelOptions={options} currentValue={row.model} focus={current.focus} error={selectionErrorPresentation(operationError())?.message} onSelect={(model) => dispatch({ type: "SELECT_MODEL", model })} />;
+          return <ModelSelect theme={props.theme} row={row} models={options.map((option) => option.value)} modelOptions={options} currentValue={row.model} focus={current.focus} error={selectionErrorPresentation(operationError())?.message} onMoveFocus={(delta) => dispatch({ type: "MOVE_FOCUS", delta, maxFocus: Math.max(0, options.length - 1) })} onSelect={(model) => dispatch({ type: "SELECT_MODEL", model })} />;
         }
         const variants = effortSelectionOptions(props.variantOptions(current.model));
         return <EffortSelect theme={props.theme} row={row} variants={variants} focus={current.focus} error={selectionErrorPresentation(operationError())?.message} onSelect={(effort) => { setOperationError(undefined); void applyModelAssignment(props.controller, row.id, current.model, effort, dispatch, setBusy).catch((error) => setOperationError(operationErrorMessage(error))); }} />;

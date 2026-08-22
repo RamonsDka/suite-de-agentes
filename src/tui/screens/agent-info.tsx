@@ -12,7 +12,8 @@ export interface AgentInfoProps {
   onBack: () => void;
 }
 
-export const AGENT_INFO_LAYOUT = { flexGrow: 1, flexShrink: 1, minWidth: 0, minHeight: 0, gap: 1 };
+export const AGENT_INFO_LAYOUT = { flexGrow: 1, flexShrink: 1, minWidth: 0, minHeight: 0, justifyContent: "center" as const, alignItems: "center" as const };
+export const AGENT_INFO_CONTENT_LAYOUT = { width: "100%" as const, maxHeight: "88%" as const, flexShrink: 1, minWidth: 0, minHeight: 0, gap: 1 };
 export const AGENT_INFO_DETAIL_LAYOUT = { flexGrow: 1, flexShrink: 1, minWidth: 0, minHeight: 0, gap: 1, overflow: "scroll" as const };
 export const AGENT_INFO_ACTIONS_LAYOUT = { flexShrink: 0, minWidth: 0 };
 
@@ -52,18 +53,20 @@ export function AgentInfo(props: AgentInfoProps): JSX.Element {
   };
   return (
     <box {...AGENT_INFO_LAYOUT} flexDirection="column">
-      <scrollbox {...AGENT_INFO_DETAIL_LAYOUT}>
-        {agentInfoDisplaySections(props.row, props.operations).map((section) => (
-          <SectionPanel theme={props.theme} title={section.title}>
-            {section.fields.map(([label, value]) => label === "Estado"
-              ? <box flexDirection="row"><text fg={props.theme.current.textMuted}>{label}: </text><StatusBadge theme={props.theme} status={agentInfoStatus(props.row)}>{value}</StatusBadge></box>
-              : <FieldRow theme={props.theme} label={label} value={value} wrap />)}
-          </SectionPanel>
-        ))}
-      </scrollbox>
-      <Divider theme={props.theme} />
-      <box {...AGENT_INFO_ACTIONS_LAYOUT} flexDirection="column">
-        {actions().map((label, index) => <SelectableRow theme={props.theme} selected={props.focus === index} onActivate={() => action(index)}>{label}</SelectableRow>)}
+      <box {...AGENT_INFO_CONTENT_LAYOUT} flexDirection="column">
+        <scrollbox {...AGENT_INFO_DETAIL_LAYOUT}>
+          {agentInfoDisplaySections(props.row, props.operations).map((section) => (
+            <SectionPanel theme={props.theme} title={section.title}>
+              {section.fields.map(([label, value]) => label === "Estado"
+                ? <box flexDirection="row"><text fg={props.theme.current.textMuted}>{label}: </text><StatusBadge theme={props.theme} status={agentInfoStatus(props.row)}>{value}</StatusBadge></box>
+                : <FieldRow theme={props.theme} label={label} value={value} wrap />)}
+            </SectionPanel>
+          ))}
+        </scrollbox>
+        <Divider theme={props.theme} />
+        <box {...AGENT_INFO_ACTIONS_LAYOUT} flexDirection="column">
+          {actions().map((label, index) => <SelectableRow theme={props.theme} selected={props.focus === index} onActivate={() => action(index)}>{label}</SelectableRow>)}
+        </box>
       </box>
     </box>
   );
