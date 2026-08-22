@@ -8,10 +8,7 @@ export interface AgentInfoProps {
   row: AgentCatalogRow;
   operations?: string;
   focus: number;
-  onModify: () => void;
-  onDelete: () => void;
-  onDeactivate?: () => void;
-  onReactivate?: () => void;
+  onOpenModelAssignment: () => void;
   onBack: () => void;
 }
 
@@ -39,18 +36,18 @@ export function formatAgentInfo(row: AgentCatalogRow, operations?: string): stri
   ];
 }
 
-export function infoActionKeys(row: Pick<AgentCatalogRow, "membership" | "enabled"> & { disabled?: boolean }): string[] {
-  if (row.disabled === true) return ["Reactivar", "Esc Volver"];
-  return row.membership === "custom" ? ["Renombrar", "F8 Eliminar", "Esc Volver"] : ["F5 Modificar", "Desactivar", "Esc Volver"];
+export function agentInfoActions(): readonly ["Cambiar modelo y esfuerzo", "Volver"] {
+  return ["Cambiar modelo y esfuerzo", "Volver"];
+}
+
+export function infoActionKeys(_row?: Pick<AgentCatalogRow, "membership" | "enabled"> & { disabled?: boolean }): string[] {
+  return [...agentInfoActions()];
 }
 
 export function AgentInfo(props: AgentInfoProps): JSX.Element {
-  const actions = () => props.row.disabled === true ? ["Reactivar", "Volver"] : props.row.membership === "custom" ? ["Renombrar", "Eliminar", "Volver"] : ["Modificar", "Desactivar", "Volver"];
+  const actions = agentInfoActions;
   const action = (index: number) => {
-    if (actions()[index] === "Modificar" || actions()[index] === "Renombrar") props.onModify();
-    else if (actions()[index] === "Eliminar") props.onDelete();
-    else if (actions()[index] === "Desactivar") props.onDeactivate?.();
-    else if (actions()[index] === "Reactivar") props.onReactivate?.();
+    if (actions()[index] === "Cambiar modelo y esfuerzo") props.onOpenModelAssignment();
     else props.onBack();
   };
   return (

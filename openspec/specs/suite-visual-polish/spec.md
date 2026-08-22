@@ -2,57 +2,38 @@
 
 ## Purpose
 
-Enhance visual contrast, action prominence, and input styling across all Suite de Agentes TUI surfaces.
+Preserve the incumbent visual system for the catalog-only Suite de Agentes TUI.
 
 ## Requirements
 
-### Requirement: Prominent Yellow Finalizar Action
+### Requirement: Focused read-only detail actions
 
-The system MUST render the `Finalizar` key hint and action with a prominent yellow visual style to clearly distinguish commit and completion actions from secondary navigation.
+The system MUST preserve the incumbent action-row treatment on agent details while rendering only `Cambiar modelo y esfuerzo` and `Volver`. It MUST NOT render `Finalizar`, authoring status, or other editing actions.
 
-**User Story:** As a user, I want the finalize action visually highlighted so that I can easily identify how to save and finish my work.
+#### Scenario: Render agent detail actions
 
-#### Acceptance & Edge Case Checklist
-- [ ] `Finalizar` action is rendered with yellow visual accent.
-- [ ] Styling applies consistently across all authoring and settings screens.
+- GIVEN an agent detail surface is displayed
+- WHEN its action footer renders
+- THEN it shows `Cambiar modelo y esfuerzo` and `Volver`
+- AND it does not show authoring or finalization controls
 
-#### Scenario: Render yellow Finalizar action
-- GIVEN an authoring or settings surface is displayed
-- WHEN the action footer renders
-- THEN the `Finalizar` action is styled with a yellow color accent
+### Requirement: Blue labels and white values contrast hierarchy
 
----
+The system MUST style field labels, section headers, and field titles with the incumbent blue palette, and display values, active selections, and body content with the incumbent high-contrast treatment.
 
-### Requirement: Blue Labels and White Values Contrast Hierarchy
+#### Scenario: Render catalog details
 
-The system MUST style form labels, section headers, and field titles in blue, and input values, active selections, and body content in white.
-
-**User Story:** As a user, I want clear contrast between field labels and values so that forms are easy to read and navigate.
-
-#### Acceptance & Edge Case Checklist
-- [ ] Field labels and titles render in blue palette.
-- [ ] Editable values and active text render in white.
-- [ ] High contrast is preserved across terminal backgrounds.
-
-#### Scenario: Form field rendering
-- GIVEN a form screen with configuration fields
+- GIVEN a catalog detail or model-selection screen with fields
 - WHEN the screen renders
-- THEN all field labels are displayed in blue
-- AND all field values are displayed in white
+- THEN labels use the blue hierarchy
+- AND values remain clearly readable on supported terminal backgrounds
 
----
+### Requirement: Semi-transparent blue search input
 
-### Requirement: Semi-Transparent Blue Search Input
+The catalog search field MUST retain its semi-transparent blue container and blue focus accent.
 
-The system MUST render search filter fields with a semi-transparent blue container and blue focus accent.
+#### Scenario: Focus search
 
-**User Story:** As a user, I want search inputs to look distinct and responsive so that filtering feels focused and clear.
-
-#### Acceptance & Edge Case Checklist
-- [ ] Search input has semi-transparent blue background styling.
-- [ ] Active focus displays blue border and cursor accent.
-
-#### Scenario: Search field focused
-- GIVEN a list view with a search filter
-- WHEN the search field is focused
-- THEN the search box displays semi-transparent blue styling with focus indication
+- GIVEN the catalog search field is focused
+- WHEN the catalog renders
+- THEN the search field shows the established focus styling

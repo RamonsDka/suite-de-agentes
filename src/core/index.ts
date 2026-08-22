@@ -1,5 +1,4 @@
 export * from "./types.ts";
-export * from "./coordinator.ts";
 export * from "./skill-catalog.ts";
 export * from "./net-guard.ts";
 export * from "./skill-package.ts";

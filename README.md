@@ -1,6 +1,6 @@
 # Suite de Agentes
 
-`opencode-agent-suite` is an independent OpenCode plugin that exposes a scoped agent catalog, custom-agent creation, and per-turn consent controls. The visible product name is **Suite de Agentes**.
+`opencode-agent-suite` is an independent OpenCode plugin that exposes a scoped agent catalog, model-and-effort assignment, and per-turn consent controls. The visible product name is **Suite de Agentes**.
 
 ## Quick start
 
@@ -33,30 +33,32 @@ Add the server entry to `opencode.json` and the TUI entry to `tui.json`:
 
 Use absolute paths as shown; this matches the local TUI plugin installation used by OpenCode 1.18.5. The package exports are also available as `.`/`./server` for `dist/server.js` and `./tui` for `dist/tui.js` when a local package spec is supported by the host. Restart OpenCode, then press **Alt+S**, use `/agent-suite`, or select Suite de Agentes from the command palette.
 
-The Suite de Agentes window has exactly two options:
+Suite de Agentes opens directly on the native, searchable OpenTUI catalog. Each row opens the existing Spanish detail layout for identity, status, description, skills, operations, model, and effort.
 
-1. **Catálogo** — browse the owned seed members (`general` and `agent-especialit-github`) and custom agents.
-2. **Crear agente** — start an adaptive AI interview that asks one focused question per turn, keeps a live safe-field checkpoint, and requires review before saving.
+The catalog UI is intentionally read-only except for one focused assignment flow:
 
-The interview replays its in-memory transcript through fresh tool-less coordinator calls. You can answer with quick replies or free text, edit the six safe fields in review, request another interview turn, or discard without writing. Agent permissions remain product-owned; pending skills are ingested only after approval.
+1. Choose **Cambiar modelo y esfuerzo** from an agent's details.
+2. Select a provider.
+3. Select one of that provider's models.
+4. Select an effort level supported by that model.
 
-The catalog is a native, scrollable OpenTUI selection. Each row opens Spanish details and state-aware actions. Custom rows can be materialized or removed; seed rows cannot be deleted. The sidebar and dialog titles show the plugin version (`v1.0.1`).
+Agent creation and all other definition changes are owned by the external orchestrator. Reopening or refreshing Suite de Agentes reloads persisted configuration so externally integrated agents appear in the catalog. The sidebar and dialog titles show the plugin version (`v1.0.1`).
 
 Exact Windows and POSIX examples are in [`docs/local-install.md`](docs/local-install.md).
 
 ## What it manages
 
-- The owned catalog contains `general`, `agent-especialit-github`, and custom agents created through this plugin.
+- The owned catalog contains `general`, `agent-especialit-github`, and externally managed custom agents.
 - Runtime agents outside that allowlist—including `sdd-*`, `review-*`, `jd-*`, `*-fallback`, `gentle-orchestrator`, and unrelated IDs—never become catalog members.
 - A member absent from the current runtime is shown as unavailable/not materialized instead of being replaced by another runtime agent.
 - The runtime model catalog is read from OpenCode state; the plugin does not invent providers or models.
-- Custom agents have an ID, description, model, prompt, permissions, and associated skills.
-- Generated markdown materializes `permission.skill: allow` and explicit skill instructions in the prompt only after confirmation.
+- Custom agents have an ID, description, model, prompt, permissions, and associated skills; the catalog displays those values without editing them.
+- The Suite UI changes only model and effort. It has no built-in AI, interview, or skill-ingestion flow; creation, skills, operations, permissions, lifecycle, and agent-definition edits are performed externally.
 - Host failures disable only the optional UI surface; the host-compatible fallback keeps registration and catalog access safe.
 
 ## Consent per turn
 
-When the active session agent is `gentle-orchestrator`, the plugin permanently authorizes only the exact internal Gentle-AI system allowlist: every configured primary and fallback `sdd-*` agent, every configured review lens and `review-refuter` pair, and every configured Judgment Day judge/fix pair. This is an explicit name allowlist, not a prefix rule; a name such as `sdd-evil` is not internal. `general`, built-in `explore`, `agent-especialit-github`, and plugin-created custom agents remain user agents and require an exact current-message grant:
+When the active session agent is `gentle-orchestrator`, the plugin permanently authorizes only the exact internal Gentle-AI system allowlist: every configured primary and fallback `sdd-*` agent, every configured review lens and `review-refuter` pair, and every configured Judgment Day judge/fix pair. This is an explicit name allowlist, not a prefix rule; a name such as `sdd-evil` is not internal. `general`, built-in `explore`, `agent-especialit-github`, and externally managed custom agents remain user agents and require an exact current-message grant:
 
 ```text
 usa también agente: github-specialist
@@ -93,7 +95,7 @@ The private registry defaults to:
 ~/.config/opencode/agent-suite/suites.json
 ```
 
-The persisted shape is `{ "version": 1, "customAgents": {} }`. Writes are validated, mode `0600`, temporary-file plus rename atomic, and do not edit global OpenCode configuration. An empty legacy registry is replaced only by a successful write; real legacy assignments are rejected visibly in Spanish and left untouched. Global custom agents, when explicitly confirmed, are written as markdown under:
+The persisted shape includes `version`, `customAgents`, `modelAssignments`, and `variantAssignments`, with optional base overrides and disabled-agent state. A legacy `coordinator` field is retained only as opaque compatibility data; it is not a current UI or controller feature. Writes are validated, mode `0600`, temporary-file plus rename atomic, and do not edit global OpenCode configuration. An empty legacy registry is replaced only by a successful write; real legacy assignments are rejected visibly in Spanish and left untouched. Global custom agents, when explicitly confirmed, are written as markdown under:
 
 ```text
 ~/.config/opencode/agent/<agent-id>.md

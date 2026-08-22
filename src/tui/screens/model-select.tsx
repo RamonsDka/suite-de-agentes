@@ -14,6 +14,32 @@ export interface ModelSelectProps {
   onSelect: (model: string) => void;
 }
 
+export interface RuntimeModel {
+  id: string;
+  name: string;
+  variants?: Record<string, unknown>;
+}
+
+export interface RuntimeModelProvider {
+  id: string;
+  name: string;
+  models: Record<string, RuntimeModel>;
+}
+
+export interface ModelSelectionOption {
+  title: string;
+  value: string;
+}
+
+export function providerSelectionOptions(providers: readonly RuntimeModelProvider[]): ModelSelectionOption[] {
+  return providers.map(({ id, name }) => ({ title: name, value: id }));
+}
+
+export function providerModelOptions(providers: readonly RuntimeModelProvider[], providerId: string): ModelSelectionOption[] {
+  return Object.values(providers.find((provider) => provider.id === providerId)?.models ?? {})
+    .map(({ id, name }) => ({ title: name, value: `${providerId}/${id}` }));
+}
+
 export const MODEL_EMPTY_MESSAGE = "No hay modelos disponibles.";
 
 export function modelSelectionOptions(models: readonly string[]): Array<{ title: string; value: string }> {
@@ -51,6 +77,27 @@ export function ModelSelect(props: ModelSelectProps): JSX.Element {
       {modelSelectionRows(options(), props.focus, props.currentValue ?? props.row.model).map((option) => <SelectableRow theme={props.theme} selected={option.selected} status={option.current ? "info" : undefined} onActivate={() => props.onSelect(option.value)}>{modelSelectionCue(option.title, Boolean(option.current))}</SelectableRow>)}
       {options().length === 0 ? <text fg={colors().textMuted}>{MODEL_EMPTY_MESSAGE}</text> : null}
       {props.error ? <text fg={colors().error}>{props.error}</text> : null}
+      </SectionPanel>
+    </box>
+  );
+}
+
+export interface ProviderSelectProps {
+  theme: TuiTheme;
+  providers: readonly RuntimeModelProvider[];
+  focus: number;
+  error?: string;
+  onSelect: (provider: string) => void;
+}
+
+export function ProviderSelect(props: ProviderSelectProps): JSX.Element {
+  const options = () => providerSelectionOptions(props.providers);
+  return (
+    <box flexDirection="column" gap={1}>
+      <SectionPanel theme={props.theme} title="Proveedor">
+        {options().map((option, index) => <SelectableRow theme={props.theme} selected={props.focus === index} onActivate={() => props.onSelect(option.value)}>{option.title}</SelectableRow>)}
+        {options().length === 0 ? <text fg={props.theme.current.textMuted}>No hay proveedores disponibles.</text> : null}
+        {props.error ? <text fg={props.theme.current.error}>{props.error}</text> : null}
       </SectionPanel>
     </box>
   );

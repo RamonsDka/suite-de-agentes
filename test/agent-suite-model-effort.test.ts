@@ -1,31 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { initialNavState, reduceNav, type NavState } from "../src/tui/agent-suite-nav.ts";
+import { reduceNav, type NavState } from "../src/tui/agent-suite-nav.ts";
 import { EffortSelect, effortSelectionOptions, effortSelectionRows } from "../src/tui/screens/effort-select.tsx";
-import { MODEL_EMPTY_MESSAGE, ModelSelect, modelSelectionCue, modelSelectionOptions, modelSelectionRows } from "../src/tui/screens/model-select.tsx";
-import { applyEffortSelection, applyModelSelection, eventForKey, handleSelectionKey } from "../src/tui/agent-suite-app.tsx";
-import type { AgentSuiteController } from "../src/tui/agent-suite-controller.ts";
+import { MODEL_EMPTY_MESSAGE, ModelSelect, modelSelectionCue, modelSelectionOptions, modelSelectionRows, providerModelOptions, providerSelectionOptions } from "../src/tui/screens/model-select.tsx";
+import { applyModelAssignment, eventForKey } from "../src/tui/agent-suite-app.tsx";
 import { buildAgentModelOptions, buildAgentVariantOptions, buildRuntimeModelOptions } from "../src/tui/index.tsx";
 import { selectionErrorPresentation } from "../src/tui/visual-primitives.tsx";
 
 const row = { id: "general", membership: "seed" as const, enabled: true, model: "anthropic/sonnet", variant: "high", skills: [], consent: "explicit-current-turn" as const };
-const state: NavState = { stack: [{ kind: "landing", focus: 0 }, { kind: "info", agentId: row.id, focus: 0 }, { kind: "modify", agentId: row.id, focus: 0, edit: { mode: "menu" } }, { kind: "model", agentId: row.id, focus: 0 }], busy: false, closing: false };
-
-function controller(): AgentSuiteController & { calls: string[] } {
-  const calls: string[] = [];
-  return {
-    calls,
-    snapshot: () => ({ rows: [row], version: "1.0.1" }),
-    refresh: () => calls.push("refresh"),
-    createAgent: async () => undefined,
-    deleteAgent: async () => undefined,
-    materialize: async () => undefined,
-    setModel: async () => { calls.push("model"); },
-    setEffort: async () => { calls.push("effort"); },
-    setSkills: async () => undefined,
-    setOperations: async () => undefined,
-    patchAgent: async () => undefined,
-  };
-}
+const state: NavState = { stack: [{ kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false }, { kind: "info", agentId: row.id, focus: 0 }, { kind: "provider", agentId: row.id, focus: 0 }, { kind: "model", agentId: row.id, provider: "anthropic", focus: 0 }], busy: false, closing: false };
 
 describe("Agent Suite model and effort screens", () => {
   it("builds bounded model and normalized effort options", () => {
@@ -94,63 +76,19 @@ describe("Agent Suite model and effort screens", () => {
     expect(buildRuntimeModelOptions({ state: { provider: [] } } as never)).toEqual([]);
   });
 
-  it("persists a selection, refreshes, and pops back to modify", async () => {
-    const fake = controller();
+  it("groups runtime models by provider and persists model plus effort together", async () => {
+    const providers = [{ id: "anthropic", name: "Anthropic", models: { sonnet: { id: "sonnet", name: "Claude Sonnet", variants: { high: {} } } } }];
+    expect(providerSelectionOptions(providers)).toEqual([{ title: "Anthropic", value: "anthropic" }]);
+    expect(providerModelOptions(providers, "anthropic")).toEqual([{ title: "Claude Sonnet", value: "anthropic/sonnet" }]);
+    const setModelAndEffort = vi.fn(async () => undefined);
+    const refresh = vi.fn();
     const dispatch = vi.fn();
     const busy: boolean[] = [];
-    await applyModelSelection(fake, row.id, "anthropic/claude-sonnet", dispatch, (value) => busy.push(value));
-    await applyEffortSelection(fake, row.id, "high", dispatch, (value) => busy.push(value));
-    expect(fake.calls).toEqual(["model", "refresh", "effort", "refresh"]);
-    expect(busy).toEqual([true, false, true, false]);
-    expect(dispatch).toHaveBeenNthCalledWith(1, { type: "SELECT_MODEL", model: "anthropic/claude-sonnet" });
-    expect(dispatch).toHaveBeenNthCalledWith(2, { type: "SELECT_EFFORT", effort: "high" });
-    expect(reduceNav(state, { type: "SELECT_MODEL", model: "anthropic/claude-sonnet" }).stack.at(-1)?.kind).toBe("effort");
-  });
-
-  it("leaves selection failures for the screen to render and clears busy state", async () => {
-    const fake = controller();
-    fake.setModel = async () => { throw new Error("model write failed"); };
-    fake.setEffort = async () => { throw new Error("effort write failed"); };
-    const dispatch = vi.fn();
-    const busy: boolean[] = [];
-
-    await expect(applyModelSelection(fake, row.id, "anthropic/claude-sonnet", dispatch, (value) => busy.push(value))).rejects.toThrow("model write failed");
-    await expect(applyEffortSelection(fake, row.id, "high", dispatch, (value) => busy.push(value))).rejects.toThrow("effort write failed");
-    expect(dispatch).not.toHaveBeenCalled();
-    expect(busy).toEqual([true, false, true, false]);
-  });
-
-  it("routes keyboard Enter through persistence and the same navigation path as mouse", async () => {
-    const fake = controller();
-    const dispatch = vi.fn();
-    const setError = vi.fn();
-    const busy: boolean[] = [];
-    const key = { name: "return", preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as import("@opencode-ai/plugin/tui").KeyEvent;
-    const selectionState: NavState = { ...state, stack: [...state.stack.slice(0, -1), { kind: "model", agentId: row.id, focus: 0 }] };
-    const selection = eventForKey(key, selectionState, 0, undefined, { focusedModel: "openai/new", models: ["openai/new"] });
-
-    expect(selection).toEqual({ type: "SELECT_MODEL", model: "openai/new" });
-    await expect(handleSelectionKey(key, selection!, row.id, fake, dispatch, setError, (value: boolean) => busy.push(value))).resolves.toBe(true);
-    expect(fake.calls).toEqual(["model", "refresh"]);
-    expect(dispatch).toHaveBeenCalledWith({ type: "SELECT_MODEL", model: "openai/new" });
-    expect(reduceNav(state, dispatch.mock.calls[0]![0]).stack.at(-1)?.kind).toBe("effort");
-    expect(setError).toHaveBeenCalledWith(undefined);
+    await applyModelAssignment({ setModelAndEffort, refresh }, row.id, "anthropic/claude-sonnet", "high", dispatch, (value) => busy.push(value));
+    expect(setModelAndEffort).toHaveBeenCalledWith(row.id, "anthropic/claude-sonnet", "high");
+    expect(refresh).toHaveBeenCalledTimes(1);
     expect(busy).toEqual([true, false]);
-    expect(key.preventDefault).toHaveBeenCalledTimes(1);
-    expect(key.stopPropagation).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps keyboard selection errors visible and does not navigate", async () => {
-    const fake = controller();
-    fake.setEffort = async () => { throw new Error("effort write failed"); };
-    const dispatch = vi.fn();
-    const setError = vi.fn();
-    const key = { name: "return", preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as import("@opencode-ai/plugin/tui").KeyEvent;
-    const effortState: NavState = { ...state, stack: [...state.stack.slice(0, -1), { kind: "effort", agentId: row.id, focus: 0 }] };
-
-    await expect(handleSelectionKey(key, { type: "SELECT_EFFORT", effort: "high" }, row.id, fake, dispatch, setError)).resolves.toBe(true);
-    expect(setError).toHaveBeenCalledWith("effort write failed");
-    expect(dispatch).not.toHaveBeenCalled();
-    expect(reduceNav(effortState, { type: "SELECT_EFFORT", effort: "high" }).stack.at(-1)?.kind).toBe("modify");
+    expect(dispatch).toHaveBeenCalledWith({ type: "ASSIGNMENT_SAVED" });
+    expect(reduceNav(state, { type: "SELECT_MODEL", model: "anthropic/claude-sonnet" }).stack.at(-1)?.kind).toBe("effort");
   });
 });

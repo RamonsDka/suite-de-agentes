@@ -1,13 +1,11 @@
-import type { AgentCatalogRow, CoordinatorConfig, CustomAgent, SuiteConfig } from "../core/types.ts";
+import type { AgentCatalogRow, CustomAgent, SuiteConfig } from "../core/types.ts";
 import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { buildSuiteDeAgentesCatalog, SUITE_DE_AGENTES_SEED } from "../core/suites.ts";
-import { patchBaseAgent, patchCustomAgent, setAgentModelAssignment, validateSkillId, type AgentPatch } from "../core/config.ts";
+import { patchBaseAgent, patchCustomAgent, setAgentModelAssignment, type AgentPatch } from "../core/config.ts";
 import { loadSuiteConfig, saveSuiteConfig } from "../core/persistence.ts";
-import { buildPendingSkillPackage, globalSkillPath, installPendingSkill, type PendingSkillPackageFactory } from "../core/skill-install.ts";
 import { globalAgentPath, materializeGlobalAgent, renameMaterializedAgentResult } from "../core/agents.ts";
-import type { CreateDraft } from "./agent-suite-nav.ts";
-import type { PendingSkill } from "../core/types.ts";
+import type { CreateDraft } from "./agent-suite-create.ts";
 
 export interface AgentSuiteController {
   snapshot(): { rows: AgentCatalogRow[]; disabledRows?: AgentCatalogRow[]; version: string };
@@ -19,13 +17,11 @@ export interface AgentSuiteController {
   materialize(id: string): Promise<void>;
   setModel(id: string, model: string): Promise<void>;
   setEffort(id: string, variant: string): Promise<void>;
+  setModelAndEffort(id: string, model: string, effort: string): Promise<void>;
   setSkills(id: string, skills: string[]): Promise<void>;
   setOperations(id: string, prompt: string): Promise<void>;
   patchAgent(id: string, patch: AgentPatch): Promise<void>;
   operations?(id: string): string | undefined;
-  coordinator?(): CoordinatorConfig | undefined;
-  setCoordinator?(coordinator: CoordinatorConfig): Promise<void>;
-  ingestPendingSkills?(agentId: string, pendingSkills: readonly PendingSkill[]): Promise<void>;
 }
 
 type ControllerOptions = {
@@ -34,7 +30,6 @@ type ControllerOptions = {
   custom?: Record<string, CustomAgent>;
   seed?: readonly string[];
   home?: string;
-  pendingSkillPackage?: PendingSkillPackageFactory;
 };
 
 export function createAgentSuiteController(
@@ -65,47 +60,6 @@ export function createAgentSuiteController(
   const persist = () => { if (options.path) saveSuiteConfig(options.path, config); };
   const find = (id: string) => currentRows.find((row) => row.id === id);
   const mutation = async (operation: () => void) => { operation(); persist(); rebuild(); };
-  const pendingSkillPackage = options.pendingSkillPackage ?? buildPendingSkillPackage;
-  const assignedSkills = (id: string): string[] => config.customAgents[id]?.skills
-    ? [...config.customAgents[id].skills]
-    : [...(config.baseOverrides?.[id]?.skills ?? find(id)?.skills ?? [])];
-  const assignPendingSkill = (agentId: string, skillId: string): void => {
-    const skills = [...new Set([...assignedSkills(agentId), skillId])];
-    if (config.customAgents[agentId]) config.customAgents[agentId].skills = skills;
-    else if (seed.includes(agentId)) config = { ...config, baseOverrides: { ...(config.baseOverrides ?? {}), [agentId]: { ...(config.baseOverrides?.[agentId] ?? {}), skills } } };
-    else throw new Error(`Unknown agent: ${agentId}`);
-  };
-  const ingestPendingSkills = async (agentId: string, pendingSkills: readonly PendingSkill[]): Promise<void> => {
-    const prior = structuredClone(config);
-    try {
-      for (const pending of pendingSkills) {
-        const skillId = validateSkillId(pending.id.trim());
-        if (assignedSkills(agentId).includes(skillId)) continue;
-        if (!existsSync(globalSkillPath(skillId, options.home))) {
-          await installPendingSkill(pending, agentId, {
-            home: options.home,
-            packageFactory: pendingSkillPackage,
-            validate: async () => {
-              if (!existsSync(globalSkillPath(skillId, options.home))) throw new Error(`Skill installation did not produce ${skillId}.`);
-            },
-            assign: async (_target, installedSkillId) => {
-              assignPendingSkill(agentId, installedSkillId);
-              persist();
-              rebuild();
-            },
-          });
-        } else {
-          assignPendingSkill(agentId, skillId);
-          persist();
-          rebuild();
-        }
-      }
-    } catch (error) {
-      config = prior;
-      try { persist(); } finally { rebuild(); }
-      throw error;
-    }
-  };
   const patchAgent = async (id: string, patch: AgentPatch) => {
     const prior = structuredClone(config);
     let patched = seed.includes(id)
@@ -175,7 +129,10 @@ export function createAgentSuiteController(
       disabledRows: disabledRows.map((row) => ({ ...row, skills: [...row.skills] })),
       version,
     }),
-    refresh: () => rebuild(),
+    refresh: () => {
+      if (options.path) config = loadSuiteConfig(options.path);
+      rebuild();
+    },
     createAgent: async (draft) => mutation(() => {
       if (config.customAgents[draft.id] || seed.includes(draft.id)) throw new Error(`Agent already exists: ${draft.id}`);
       config.customAgents[draft.id] = { id: draft.id, description: draft.description, model: draft.model, prompt: draft.operations, permissions: { read: "allow", edit: "ask" }, skills: [...draft.skills] };
@@ -220,12 +177,10 @@ export function createAgentSuiteController(
     }),
     setModel: async (id, model) => mutation(() => { config = setAgentModelAssignment(config, id, model, config.variantAssignments[id]); }),
     setEffort: async (id, variant) => mutation(() => { config = setAgentModelAssignment(config, id, config.modelAssignments[id] ?? find(id)?.model ?? "openai/gpt-5", variant || undefined); }),
+    setModelAndEffort: async (id, model, effort) => mutation(() => { config = setAgentModelAssignment(config, id, model, effort || undefined); }),
     setSkills: async (id, skills) => mutation(() => { const agent = config.customAgents[id]; if (!agent) throw new Error(`Unknown custom agent: ${id}`); agent.skills = [...skills]; }),
     setOperations: async (id, prompt) => mutation(() => { const agent = config.customAgents[id]; if (!agent) throw new Error(`Unknown custom agent: ${id}`); agent.prompt = prompt; }),
     patchAgent,
     operations: (id) => config.customAgents[id]?.prompt ?? config.baseOverrides?.[id]?.operations,
-    coordinator: () => config.coordinator && { ...config.coordinator },
-    setCoordinator: async (coordinator) => mutation(() => { config = { ...config, coordinator: { ...coordinator } }; }),
-    ingestPendingSkills,
   };
 }

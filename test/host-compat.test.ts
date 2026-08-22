@@ -27,6 +27,6 @@ describe("TUI host compatibility", () => {
   });
 
   it("exposes exactly the three Spanish root options including configuration", () => {
-    expect(buildSuiteRootOptions().map((option) => option.title)).toEqual(["Catálogo", "Crear agente", "⚙ Configuración"]);
+    expect(buildSuiteRootOptions()).toEqual([{ title: "Catálogo de agentes", value: "catalog" }]);
   });
 });

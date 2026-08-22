@@ -62,7 +62,7 @@ describe("Agent Suite catalog", () => {
   });
 
   it("maps catalog paging, focus, and Enter to the captured row identity", () => {
-    const catalog = { stack: [{ kind: "landing", focus: 0 }, { kind: "catalog", page: 1, focus: 2 }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
+    const catalog = { stack: [{ kind: "catalog", page: 1, focus: 2, query: "", searchFocused: false }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
     expect(eventForKey({ name: "pageup" } as KeyEvent, catalog, rows.length)).toEqual({ type: "PAGE", delta: -1, maxPage: 2 });
     expect(eventForKey({ name: "pagedown" } as KeyEvent, catalog, rows.length)).toEqual({ type: "PAGE", delta: 1, maxPage: 2 });
     expect(eventForKey({ name: "down" } as KeyEvent, catalog, rows.length)).toEqual({ type: "MOVE_FOCUS", delta: 1, maxFocus: 5 });
@@ -75,7 +75,7 @@ describe("Agent Suite catalog", () => {
       { ...rows[1], id: "research-one" },
       { ...rows[2], id: "research-two" },
     ];
-    const searching = reduceNav({ stack: [{ kind: "landing", focus: 0 }, { kind: "catalog", page: 0, focus: 0, query: "", searchFocused: true }], busy: false, closing: false }, { type: "FOCUS_CATALOG_RESULTS", query: "research" });
+    const searching = reduceNav({ stack: [{ kind: "catalog", page: 0, focus: 0, query: "", searchFocused: true }], busy: false, closing: false }, { type: "FOCUS_CATALOG_RESULTS", query: "research" });
     const moved = reduceNav(searching, { type: "MOVE_FOCUS", delta: 1, maxFocus: 1 });
     const screen = moved.stack.at(-1);
     const filtered = filterCatalogRows(catalogRows, "research");
@@ -88,19 +88,16 @@ describe("Agent Suite catalog", () => {
     expect(eventForKey({ name: "return" } as KeyEvent, moved, filtered.length, highlighted?.id)).toEqual({ type: "ACTIVATE_AGENT", agentId: "research-two" });
   });
 
-  it("keeps seed info Volver as Back and ignores F8 while preserving custom delete", () => {
-    const seedInfo = { stack: [{ kind: "landing", focus: 0 }, { kind: "info", agentId: "general", focus: 1 }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
-    const customInfo = { ...seedInfo, stack: [...seedInfo.stack.slice(0, -1), { kind: "info", agentId: "custom", focus: 1 }] } as import("../src/tui/agent-suite-nav.ts").NavState;
-    const options = { infoActionCount: 2, isCustom: false, canDelete: false };
+  it("offers only model assignment and back from all agent details", () => {
+    const info = { stack: [{ kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false }, { kind: "info", agentId: "general", focus: 0 }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
 
-    expect(eventForKey({ name: "return" } as KeyEvent, seedInfo, 1, undefined, { ...options, infoActionCount: 2, isEnabled: undefined })).toEqual({ type: "DEACTIVATE_AGENT", agentId: "general" });
-    expect(eventForKey({ name: "f8" } as KeyEvent, seedInfo, 1, undefined, options)).toBeUndefined();
-    expect(eventForKey({ name: "return" } as KeyEvent, customInfo, 1, undefined, { infoActionCount: 3, isCustom: true, canDelete: true })).toEqual({ type: "REQUEST_DELETE", agentId: "custom" });
-    expect(eventForKey({ name: "f8" } as KeyEvent, customInfo, 1, undefined, { infoActionCount: 3, isCustom: true, canDelete: true })).toEqual({ type: "REQUEST_DELETE", agentId: "custom" });
+    expect(eventForKey({ name: "return" } as KeyEvent, info)).toEqual({ type: "OPEN_MODEL_ASSIGNMENT" });
+    expect(eventForKey({ name: "f5" } as KeyEvent, info)).toBeUndefined();
+    expect(eventForKey({ name: "f8" } as KeyEvent, info)).toBeUndefined();
   });
 
   it("leaves submit to the focused input and lets Escape/arrows reclaim catalog ownership", () => {
-    const searching = { stack: [{ kind: "landing", focus: 0 }, { kind: "catalog", page: 0, focus: 0, query: "son", searchFocused: true }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
+    const searching = { stack: [{ kind: "catalog", page: 0, focus: 0, query: "son", searchFocused: true }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
     expect(eventForKey({ name: "return" } as KeyEvent, searching, rows.length, "agent-0")).toBeUndefined();
     expect(eventForKey({ name: "kpenter" } as KeyEvent, searching, rows.length, "agent-0")).toBeUndefined();
     expect(eventForKey({ name: "f10" } as KeyEvent, searching, rows.length, "agent-0")).toBeUndefined();
@@ -109,13 +106,13 @@ describe("Agent Suite catalog", () => {
   });
 
   it("supports the explicit slash search entry and numeric Enter alias outside text entry", () => {
-    const catalog = { stack: [{ kind: "landing", focus: 0 }, { kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
+    const catalog = { stack: [{ kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
     expect(eventForKey({ name: "/", sequence: "/" } as KeyEvent, catalog, rows.length)).toEqual({ type: "FOCUS_CATALOG_SEARCH" });
-    expect(eventForKey({ name: "kpenter" } as KeyEvent, { ...catalog, stack: [{ ...catalog.stack[0]! }, { kind: "landing", focus: 0 }] } as never)).toEqual({ type: "ACTIVATE_LANDING_ITEM", index: 0 });
+    expect(eventForKey({ name: "kpenter" } as KeyEvent, catalog, rows.length, "agent-0")).toEqual({ type: "ACTIVATE_AGENT", agentId: "agent-0" });
   });
 
   it("clamps a stale page and focus after the catalog shrinks", () => {
-    const stale = { stack: [{ kind: "landing", focus: 0 }, { kind: "catalog", page: 2, focus: 5, query: "", searchFocused: false }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
+    const stale = { stack: [{ kind: "catalog", page: 2, focus: 5, query: "", searchFocused: false }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
     const normalized = normalizeCatalogState(stale, rows.slice(0, 2));
 
     expect(normalized.stack.at(-1)).toMatchObject({ kind: "catalog", page: 0, focus: 1 });

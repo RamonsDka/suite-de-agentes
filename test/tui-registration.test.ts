@@ -7,7 +7,6 @@ import plugin, {
   AGENT_SUITE_KEY,
   buildCatalogOptions,
   catalogDetailMessage,
-  coordinatorSessionForHost,
   openAgentSuite,
   registerSuiteKeymap,
   registerSuiteSlashCommand,
@@ -78,7 +77,7 @@ describe("Agent Suite WU1 registration", () => {
     expect(open).toHaveBeenCalledTimes(2);
   });
 
-  it("consumes nested Escape through the keymap layer and leaves landing Escape to the host", () => {
+  it("consumes nested Escape through the keymap layer and leaves catalog Escape to the host", () => {
     const host = registrationHost();
     const open = vi.fn();
     expect(registerSuiteKeymap(host.api, open)).toBe(true);
@@ -104,7 +103,7 @@ describe("Agent Suite WU1 registration", () => {
     registerSuiteKeymap(host.api, open);
     const escape = host.layer.commands.find((command: any) => command.name === AGENT_SUITE_ESCAPE_COMMAND);
     const dispatch = vi.fn();
-    const searching = { stack: [{ kind: "landing", focus: 0 }, { kind: "catalog", page: 0, focus: 0, query: "old", searchFocused: true }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
+    const searching = { stack: [{ kind: "catalog", page: 0, focus: 0, query: "old", searchFocused: true }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
     const unregister = registerAgentSuiteEscapeHandler(() => handleNestedScreenEscape(searching, dispatch, "draft"));
 
     expect(escape?.run({ event: { preventDefault: vi.fn(), stopPropagation: vi.fn() } })).toBe(true);
@@ -127,13 +126,6 @@ describe("Agent Suite WU1 registration", () => {
     const source = readFileSync(join(process.cwd(), "src/tui/index.tsx"), "utf8");
     expect(source).not.toMatch(/api\.route\./);
     expect(source).not.toMatch(/registerSuiteRoute|navigateSuiteRoute|leaveSuiteRoute|selectSuiteRouteItem/);
-  });
-
-  it("adapts the mounted host client only when it exposes tool and session APIs", () => {
-    const client = { tool: {}, session: {} };
-
-    expect(coordinatorSessionForHost({} as never)).toBeUndefined();
-    expect(coordinatorSessionForHost({ client } as never)).toEqual(expect.objectContaining({ prompt: expect.any(Function) }));
   });
 
   it("uses the native opener once when custom mount fails synchronously", () => {

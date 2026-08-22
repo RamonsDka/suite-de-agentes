@@ -18,49 +18,6 @@ export interface BaseAgentOverride {
   operations?: string;
 }
 
-export interface CoordinatorConfig {
-  provider: string;
-  model: string;
-  effort?: string;
-}
-
-export interface PendingSkill {
-  id: string;
-  rationale: string;
-}
-
-export interface ModelRecommendation {
-  model: string;
-  effort: string;
-  rationale: string;
-}
-
-export interface InterviewTurn {
-  question: string;
-  quickReplies: readonly string[];
-  checkpoint: InterviewCheckpoint;
-}
-
-export interface InterviewTranscriptEntry {
-  role: "user" | "assistant";
-  text: string;
-}
-
-export type InterviewTranscript = readonly InterviewTranscriptEntry[];
-
-export interface InterviewCheckpoint {
-  draft: {
-    id: string;
-    description: string;
-    operations: string;
-    model: string;
-    effort: string;
-    skills: string[];
-  };
-  pendingSkills: readonly PendingSkill[];
-  recommendation?: ModelRecommendation;
-}
-
 export interface SuiteConfig {
   version: 1;
   customAgents: Record<string, CustomAgent>;
@@ -68,7 +25,8 @@ export interface SuiteConfig {
   variantAssignments: Record<string, string>;
   baseOverrides?: Record<string, BaseAgentOverride>;
   disabledAgents?: string[];
-  coordinator?: CoordinatorConfig;
+  /** Preserved only while reading and writing legacy configuration files. */
+  coordinator?: unknown;
 }
 
 export interface AgentCatalogRow {

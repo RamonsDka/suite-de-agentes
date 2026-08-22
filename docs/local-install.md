@@ -34,7 +34,7 @@ Add the TUI entry to `C:\Users\DELL\.config\opencode\tui.json`:
 
 ## Use the TUI
 
-Restart OpenCode after installing the plugin. Press **Alt+S** or run `/agent-suite`; the window contains only **Catálogo** and **Crear agente**. The catalog footer/title reports the plugin version (`v1.0.1`).
+Restart OpenCode after installing the plugin. Press **Alt+S** or run `/agent-suite`; the window opens directly to the searchable **Catálogo**. Agent details are read-only except for provider → model → supported effort assignment. The catalog footer/title reports the plugin version (`v1.0.1`).
 
 ## POSIX
 

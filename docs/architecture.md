@@ -6,7 +6,7 @@ Suite de Agentes is deliberately sibling-shaped and SDD-independent.
 
 - `src/core`: strict custom-agent registry, owned seed-plus-custom catalog, atomic persistence, runtime model discovery, markdown generation, consent ledger, and task policy.
 - `src/server`: OpenCode lifecycle adapters. `chat.message` records current-message grants; `tool.execute.before` is the only authority for `task` gating when the session agent is `gentle-orchestrator`.
-- `src/tui`: OpenTUI/Solid entrypoint, Alt+S and `/agent-suite` registration, exactly two root options, native scrollable catalog/detail/actions, custom-agent creation, version labels, and host compatibility guards. Registration relies on the host's current plugin lifecycle rather than adding duplicate disposal ownership.
+- `src/tui`: OpenTUI/Solid entrypoint, Alt+S and `/agent-suite` registration, direct searchable catalog, read-only details, atomic provider/model/effort assignment, version labels, and host compatibility guards. Agent-definition changes remain outside the TUI. Registration relies on the host's current plugin lifecycle rather than adding duplicate disposal ownership.
 
 ## Trust model
 
@@ -16,7 +16,7 @@ The internal Gentle-AI authorization boundary is intentionally hard-coded as one
 
 ## Persistence and materialization
 
-The registry JSON is private namespace data and is parsed before use. It stores only `version` and `customAgents`. Empty legacy suite fields are tolerated for a safe replacement on the next successful write; non-empty assignments throw before any write. Writes use a random sibling temporary file, restrictive mode, and rename. Global agent markdown is generated only after caller confirmation and validates the ID before path construction. The generated frontmatter has `permission.skill`, while skills become explicit prompt instructions.
+The registry JSON is private namespace data and is parsed before use. It stores `version`, `customAgents`, per-agent model and variant assignments, and optional base overrides or disabled-agent state. An optional legacy `coordinator` field remains opaque compatibility data only; the current plugin does not expose coordinator functionality. Empty legacy suite fields are tolerated for a safe replacement on the next successful write; non-empty assignments throw before any write. Writes use a random sibling temporary file, restrictive mode, and rename. Global agent markdown is generated only after caller confirmation and validates the ID before path construction. The generated frontmatter has `permission.skill`, while skills become explicit prompt instructions.
 
 The server plugin captures registered agent IDs from the OpenCode `config` hook. The same hook applies `transformTaskPermission()` to the top-level runtime `permission.task` map and, when present, to `agent["gentle-orchestrator"].permission.task`; the per-agent map is required because it overrides top-level permissions. `*` is denied first, exact internal names are allowed after it, and stale task rules are replaced so global configuration cannot reintroduce prompts or permissions. Other config and permission fields are preserved, and a missing orchestrator entry is not invented. If the inventory is unavailable, canonical text and native `AgentPart` consent produce no grant. Session agent resolution uses the real chat message agent first and the official session-message API as a fallback; unresolved turns fail closed only at the orchestrator gate.
 

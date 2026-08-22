@@ -96,7 +96,7 @@ describe("suite config", () => {
     });
   });
 
-  it("accepts an optional coordinator with dynamic effort variants without migrating existing registries", () => {
+  it("preserves an ignored legacy coordinator field without making it a plugin feature", () => {
     const existing = parseSuiteConfig({ version: 1, customAgents: {}, modelAssignments: {}, variantAssignments: {} });
     const configured = parseSuiteConfig({
       version: 1,
@@ -108,16 +108,6 @@ describe("suite config", () => {
 
     expect(existing).not.toHaveProperty("coordinator");
     expect(configured.coordinator).toEqual({ provider: "anthropic", model: "claude-sonnet-4-5", effort: "extra-high" });
-  });
-
-  it("rejects malformed coordinator parts while preserving dynamic variant validation", () => {
-    const base = { version: 1, customAgents: {}, modelAssignments: {}, variantAssignments: {} };
-
-    expect(() => parseSuiteConfig({ ...base, coordinator: { provider: "", model: "claude-sonnet-4-5" } })).toThrow(/coordinator/i);
-    expect(() => parseSuiteConfig({ ...base, coordinator: { provider: "anthropic cloud", model: "claude-sonnet-4-5" } })).toThrow(/coordinator/i);
-    expect(() => parseSuiteConfig({ ...base, coordinator: { provider: "anthropic", model: "../escape" } })).toThrow(/coordinator/i);
-    expect(() => parseSuiteConfig({ ...base, coordinator: { provider: "anthropic", model: "claude-sonnet-4-5", effort: "unsafe variant" } })).toThrow(/coordinator/i);
-    expect(() => parseSuiteConfig({ ...base, coordinator: { provider: "anthropic", model: "claude-sonnet-4-5", unknown: true } })).toThrow(/coordinator/i);
   });
 
   it("parses independent per-agent model assignments and rejects invalid IDs", () => {
