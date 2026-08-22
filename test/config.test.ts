@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSuiteConfig, patchCustomAgent, setAgentModelAssignment, validateAgentId, validateSkillId, validateVariantId } from "../src/core/config.ts";
+import { parseSuiteConfig, patchCustomAgent, setAgentModelAssignment, validateAgentId, validateModelId, validateSkillId, validateVariantId } from "../src/core/config.ts";
 
 const customAgent = {
   id: "local-helper",
@@ -135,6 +135,14 @@ describe("suite config", () => {
     expect(() => parseSuiteConfig({ version: 1, customAgents: {}, variantAssignments: { general: "../escape" } })).toThrow(/variant/i);
   });
 
+  it("accepts nested provider model paths while rejecting whitespace and traversal", () => {
+    expect(validateModelId("cliproxyapi/cuenta-2/gpt-5.6-sol")).toBe("cliproxyapi/cuenta-2/gpt-5.6-sol");
+    expect(validateModelId("cliproxyapi/tokenrouter-1/qwen/qwen3.8-max-free")).toBe("cliproxyapi/tokenrouter-1/qwen/qwen3.8-max-free");
+    expect(() => validateModelId("cliproxyapi/GPT_cuenta.2: 5.6-SOL")).toThrow(/model/i);
+    expect(() => validateModelId("cliproxyapi/../escape")).toThrow(/model/i);
+    expect(() => validateModelId("cliproxyapi//gpt-5")).toThrow(/model/i);
+  });
+
   it("changes one assignment without replacing the other agents", () => {
     const config = parseSuiteConfig({
       version: 1,
@@ -153,6 +161,22 @@ describe("suite config", () => {
     expect(setAgentModelAssignment(config, "general", "openai/new", "low").variantAssignments).toEqual({
       general: "low",
       "agent-especialit-github": "medium",
+    });
+  });
+
+  it("clears a prior effort when assigning a nested model with default effort", () => {
+    const config = parseSuiteConfig({
+      version: 1,
+      customAgents: {},
+      modelAssignments: { "agent-especialit-github": "opencode/x-preview-f-free" },
+      variantAssignments: { "agent-especialit-github": "low" },
+    });
+
+    expect(setAgentModelAssignment(config, "agent-especialit-github", "cliproxyapi/google-1/gemini-3.7-flash-high")).toEqual({
+      version: 1,
+      customAgents: {},
+      modelAssignments: { "agent-especialit-github": "cliproxyapi/google-1/gemini-3.7-flash-high" },
+      variantAssignments: {},
     });
   });
 

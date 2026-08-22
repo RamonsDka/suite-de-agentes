@@ -2,7 +2,6 @@ import type { BaseAgentOverride, CustomAgent, SuiteConfig } from "./types.ts";
 import { SUITE_DE_AGENTES_SEED } from "./suites.ts";
 
 const ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
-const MODEL = /^[^/\s]+\/[^/\s]+$/;
 const VARIANT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 export interface AgentPatch {
@@ -28,7 +27,10 @@ export function validateAgentId(value: string): string {
 
 export function validateModelId(value: string): string {
   const model = typeof value === "string" ? value.trim() : "";
-  if (!MODEL.test(model)) throw new Error("Invalid model id: use provider/model without whitespace");
+  const segments = model.split("/");
+  if (segments.length < 2 || segments.some((segment) => !segment || segment === "." || segment === ".." || /\s/.test(segment))) {
+    throw new Error("Invalid model id: use provider/model path without whitespace or traversal");
+  }
   return model;
 }
 
