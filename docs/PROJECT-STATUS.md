@@ -2,7 +2,7 @@
 
 ## Product
 
-Suite de Agentes is the standalone `opencode-agent-suite` OpenCode plugin. It provides an owned agent catalog, custom-agent creation, per-turn consent controls, server lifecycle integration, and an OpenTUI/Solid user interface.
+Suite de Agentes is the standalone `opencode-agent-suite` OpenCode plugin. It provides an owned agent catalog, read-only agent details, model-and-effort assignment, per-turn consent controls, server lifecycle integration, and an OpenTUI/Solid user interface. Agent-definition changes are owned by an external orchestrator.
 
 ## Stack and architecture
 

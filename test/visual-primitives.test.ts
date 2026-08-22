@@ -41,21 +41,20 @@ describe("visual primitives", () => {
 
   it("returns screen-specific key hints", () => {
     expect(screenKeyHints("catalog")).toContain("Página");
-    expect(screenKeyHints("catalog")).toContain("Info");
-    expect(screenKeyHints("landing")).toContain("Catálogo");
-    expect(screenKeyHints("landing")).toContain("Configuración");
-    expect(screenKeyHints("landing")).not.toContain("Desactivados");
+    expect(screenKeyHints("catalog")).toContain("agente");
+    expect(screenKeyHints("catalog")).not.toContain("Crear agente");
+    expect(screenKeyHints("catalog")).not.toContain("Configuración");
     expect(screenKeyHints("catalog")).toContain("buscar");
     expect(screenKeyHints("catalog")).toContain("/");
-    expect(screenKeyHints("landing")).not.toContain("Página");
+    expect(screenKeyHints("provider")).not.toContain("Página");
   });
 
-  it("presents finalization and focused search with their semantic visual treatments", () => {
-    const finalHint = screenKeyHintsForScreen({ kind: "modify", agentId: "custom-agent", focus: 0, edit: { mode: "menu" } });
+  it("presents provider selection and focused search with their semantic visual treatments", () => {
+    const finalHint = screenKeyHintsForScreen({ kind: "provider", agentId: "custom-agent", focus: 0 });
     const search = searchInputPresentation({ current } as never, true);
 
-    expect(finalHint).toContain("Finalizar");
-    expect(keyHintPresentation({ current } as never, finalHint)).toBe(current.warning);
+    expect(finalHint).toContain("Enter selecciona");
+    expect(keyHintPresentation({ current } as never, finalHint)).toBeUndefined();
     expect(search.background.a).toBeLessThan(1);
     expect(search.border).toBe(current.primary);
   });

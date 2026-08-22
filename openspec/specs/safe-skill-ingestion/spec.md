@@ -1,92 +1,31 @@
-# Safe Skill Ingestion Specification
+# Safe Skill Package Utilities Specification
 
 ## Purpose
 
-Enforce security boundaries, structural validation, bounded integration plans, automatic rollback, and audit logging for imported and AI skills.
+Provide reusable validation and installation utilities for externally supplied skill packages. These utilities are not a Suite de Agentes TUI workflow.
 
 ## Requirements
 
-### Requirement: Untrusted Ingestion and Network Safety
+### Requirement: Validate external packages
 
-The system MUST support importing skills from GitHub repository and direct HTTPS `SKILL.md` URLs. Network requests MUST enforce HTTPS-only, block private/loopback/link-local IPs (anti-SSRF), restrict redirect chains, and enforce payload size limits. Remote content and AI code MUST remain untrusted drafts until user approval.
+The utility API MUST validate externally supplied skill packages before installation. Validation MUST reject invalid identifiers, unsafe paths, duplicate paths, invalid `SKILL.md` frontmatter, and prohibited executable content.
 
-**User Story:** As a system administrator, I want strict network boundaries so that imports cannot reach private networks.
+#### Scenario: Reject unsafe package content
 
-#### Acceptance & Edge Case Checklist
-- [ ] Enforces HTTPS-only and blocks private, loopback, and link-local IPs.
-- [ ] Restricts redirects and caps payload sizes.
-- [ ] Draft content remains unapplied until approved.
+- GIVEN an external integration supplies a package with path traversal or prohibited shell content
+- WHEN package validation runs
+- THEN validation rejects the package before disk writes
 
-#### Scenario: Ingest from valid HTTPS URL
-- GIVEN a valid public HTTPS URL pointing to `SKILL.md`
-- WHEN user initiates import
-- THEN content downloads into an in-memory staging buffer
+### Requirement: Install only approved immutable plans
 
-#### Scenario: Block SSRF targeting private IP address
-- GIVEN an import URL resolving to a private IP
-- WHEN network validation runs
-- THEN the request is blocked immediately with a security error
+The generic installer MUST require an approved, frozen integration plan plus caller-provided validation and assignment callbacks. It MUST constrain writes to the configured OpenCode skill directory, reject symbolic-link escapes, roll back failed writes, and append a summarized audit record.
 
----
+#### Scenario: Roll back a failed external installation
 
-### Requirement: Structural and Security Pre-validation
+- GIVEN an approved immutable plan writes a valid package
+- WHEN the caller-provided post-install validation fails
+- THEN prior files are restored and the assignment callback is not completed
 
-The system MUST run mandatory structural and security pre-validation on candidate skill packages before installation. Pre-validation MUST verify package structure, frontmatter schemas, prevent path traversal outside skill directories, and enforce a hard deny policy on prohibited shell commands.
+### Requirement: No Suite UI ingestion
 
-**User Story:** As a user, I want automated validation checks so that dangerous skills are blocked before disk writes.
-
-#### Acceptance & Edge Case Checklist
-- [ ] Validates frontmatter schema and manifest fields.
-- [ ] Rejects paths attempting directory traversal (`../`).
-- [ ] Blocks packages containing prohibited shell patterns.
-
-#### Scenario: Reject skill with path traversal
-- GIVEN a candidate skill referencing parent directories
-- WHEN pre-validation runs
-- THEN the package is rejected with an invalid path error
-
-#### Scenario: Hard deny on prohibited shell patterns
-- GIVEN a candidate skill containing destructive commands
-- WHEN security pre-validation runs
-- THEN the package is blocked with a security error
-
----
-
-### Requirement: Bounded Integration Plan and Auto-Rollback
-
-The system MUST generate an immutable, bounded integration plan summarizing file writes, config changes, and skill assignments requiring single explicit user approval. Installation MUST run a bounded post-install test. If validation fails, the system MUST automatically roll back all written files. External credentials MUST remain manual outside Suite.
-
-**User Story:** As a user, I want an approved plan and auto-rollback so that failed installations leave no residue.
-
-#### Acceptance & Edge Case Checklist
-- [ ] Plan lists target paths and assignments.
-- [ ] Single explicit approval executes installation.
-- [ ] Test failure triggers automatic rollback.
-- [ ] External credentials stay manual outside Suite.
-
-#### Scenario: Successful integration with post-install test
-- GIVEN an approved integration plan
-- WHEN files are written and post-install test passes
-- THEN the skill is activated and assigned to the active agent
-
-#### Scenario: Automatic rollback on test failure
-- GIVEN an integration plan is executing
-- WHEN post-install validation fails
-- THEN all created files are removed and prior state restored
-
----
-
-### Requirement: Append-Only Audit Logging
-
-The system MUST maintain an append-only, summarized audit log recording all skill imports, creations, approvals, rejections, and rollbacks with timestamps, sources, and outcomes.
-
-**User Story:** As a system administrator, I want an audit trail of skill actions so that I can inspect lineage and outcomes.
-
-#### Acceptance & Edge Case Checklist
-- [ ] Audit entries append without mutating past records.
-- [ ] Records timestamp, identifier, source, action, and result.
-
-#### Scenario: Record skill installation in audit log
-- GIVEN a skill is approved and integrated
-- WHEN integration completes
-- THEN an audit entry recording timestamp, identifier, source, and outcome is appended
+The Suite catalog MUST NOT fetch, recommend, generate, install, assign, resolve conflicts for, or ingest skills. External integrations decide whether and how to use these generic utilities.

@@ -1,11 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAgentSuiteController } from "../src/tui/agent-suite-controller.ts";
 import { globalAgentPath, materializeGlobalAgent } from "../src/core/agents.ts";
 import { loadSuiteConfig, saveSuiteConfig } from "../src/core/persistence.ts";
-import type { CreateDraft } from "../src/tui/agent-suite-nav.ts";
+import type { CreateDraft } from "../src/tui/agent-suite-create.ts";
 import type { AgentCatalogRow } from "../src/core/types.ts";
 
 const row: AgentCatalogRow = { id: "custom", membership: "custom", enabled: false, skills: ["testing"], consent: "explicit-current-turn" };
@@ -25,36 +25,7 @@ describe("Agent Suite controller adapter", () => {
 
   it("supports explicit operation method names for every mutation", () => {
     const controller = createAgentSuiteController();
-    expect(Object.keys(controller)).toEqual(["snapshot", "refresh", "createAgent", "deleteAgent", "deactivateAgent", "reactivateAgent", "materialize", "setModel", "setEffort", "setSkills", "setOperations", "patchAgent", "operations", "coordinator", "setCoordinator", "ingestPendingSkills"]);
-  });
-
-  it("ingests each pending skill through the existing safe installer after controller persistence", async () => {
-    const home = mkdtempSync(join(tmpdir(), "agent-suite-controller-home-"));
-    const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
-    const controller = createAgentSuiteController([], "1.0.1", { path, home, seed: [], runtime: {} });
-
-    await controller.createAgent(draft);
-    await controller.ingestPendingSkills?.(draft.id, [{ id: "future-skill", rationale: "Needs approval." }]);
-
-    expect(existsSync(join(home, ".config", "opencode", "skills", "future-skill", "SKILL.md"))).toBe(true);
-    expect(controller.snapshot().rows.find((item) => item.id === draft.id)?.skills).toContain("future-skill");
-  });
-
-  it("skips the installer for an already-installed pending skill and only assigns it", async () => {
-    const home = mkdtempSync(join(tmpdir(), "agent-suite-controller-home-"));
-    const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
-    const skillPath = join(home, ".config", "opencode", "skills", "future-skill", "SKILL.md");
-    mkdirSync(join(home, ".config", "opencode", "skills", "future-skill"), { recursive: true });
-    writeFileSync(skillPath, "installed skill");
-    const packageFactory = vi.fn();
-    const controller = createAgentSuiteController([], "1.0.1", { path, home, seed: [], runtime: {}, pendingSkillPackage: packageFactory });
-
-    await controller.createAgent(draft);
-    await controller.ingestPendingSkills?.(draft.id, [{ id: "future-skill", rationale: "Already present." }]);
-
-    expect(packageFactory).not.toHaveBeenCalled();
-    expect(readFileSync(skillPath, "utf8")).toBe("installed skill");
-    expect(controller.snapshot().rows.find((item) => item.id === draft.id)?.skills).toContain("future-skill");
+    expect(Object.keys(controller)).toEqual(["snapshot", "refresh", "createAgent", "deleteAgent", "deactivateAgent", "reactivateAgent", "materialize", "setModel", "setEffort", "setModelAndEffort", "setSkills", "setOperations", "patchAgent", "operations"]);
   });
 
   it("builds the initial snapshot from persisted and runtime agents", () => {
@@ -62,6 +33,21 @@ describe("Agent Suite controller adapter", () => {
     writeFileSync(path, JSON.stringify({ version: 1, customAgents: { "smoke-custom": { id: "smoke-custom", description: "Smoke custom", model: "openai/gpt-5", prompt: "Smoke", permissions: { read: "allow" }, skills: [] } }, modelAssignments: {}, variantAssignments: {} }));
     const controller = createAgentSuiteController([], "1.0.1", { path, runtime: { general: { model: "openai/gpt-5" }, "smoke-custom": { model: "openai/gpt-5" } } });
     expect(controller.snapshot().rows.map(({ id }) => id)).toEqual(["agent-especialit-github", "general", "smoke-custom"]);
+  });
+
+  it("refreshes the catalog after an external orchestrator changes the suite config", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
+    const controller = createAgentSuiteController([], "1.0.1", { path, runtime: {} });
+
+    saveSuiteConfig(path, {
+      version: 1,
+      customAgents: { "externally-managed": { id: "externally-managed", description: "Managed elsewhere", model: "openai/gpt-5", prompt: "External", permissions: { read: "allow" }, skills: [] } },
+      modelAssignments: {},
+      variantAssignments: {},
+    });
+    controller.refresh();
+
+    expect(controller.snapshot().rows).toEqual(expect.arrayContaining([expect.objectContaining({ id: "externally-managed", description: "Managed elsewhere" })]));
   });
 
   it("persists a created model and effort through assignments across reload", async () => {
@@ -77,16 +63,14 @@ describe("Agent Suite controller adapter", () => {
     expect(reloaded.snapshot().rows).toEqual(expect.arrayContaining([expect.objectContaining({ id: draft.id, model: draft.model, variant: draft.effort })]));
   });
 
-  it("persists the coordinator through the controller rather than duplicating config writes in the TUI", async () => {
+  it("persists model and effort with one controller mutation", async () => {
     const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
-    const controller = createAgentSuiteController([], "1.0.1", { path, runtime: {} });
+    const controller = createAgentSuiteController([], "1.0.1", { path, runtime: { general: { model: "openai/gpt-5" } } });
 
-    expect(controller.coordinator?.()).toBeUndefined();
-    await controller.setCoordinator?.({ provider: "openai", model: "gpt-5", effort: "extra-high" });
+    await controller.setModelAndEffort("general", "anthropic/sonnet", "high");
 
-    expect(controller.coordinator?.()).toEqual({ provider: "openai", model: "gpt-5", effort: "extra-high" });
-    expect(loadSuiteConfig(path).coordinator).toEqual({ provider: "openai", model: "gpt-5", effort: "extra-high" });
-    expect(createAgentSuiteController([], "1.0.1", { path, runtime: {} }).coordinator?.()).toEqual({ provider: "openai", model: "gpt-5", effort: "extra-high" });
+    expect(loadSuiteConfig(path)).toMatchObject({ modelAssignments: { general: "anthropic/sonnet" }, variantAssignments: { general: "high" } });
+    expect(controller.snapshot().rows).toEqual(expect.arrayContaining([expect.objectContaining({ id: "general", model: "anthropic/sonnet", variant: "high" })]));
   });
 
   it("commits a custom patch, persists it, migrates its materialized file, and rebuilds", async () => {
@@ -111,7 +95,7 @@ describe("Agent Suite controller adapter", () => {
     expect(readFileSync(globalAgentPath("new-agent", home), "utf8")).toContain("name: new-agent");
   });
 
-  it("persists one AI-assisted patch for description, skills, operations, model, and effort", async () => {
+  it("persists one external patch for description, skills, operations, model, and effort", async () => {
     const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
     const agent = { id: "review-agent", description: "Old", model: "openai/old", prompt: "Old operations", permissions: { read: "allow" as const }, skills: [] };
     saveSuiteConfig(path, { version: 1, customAgents: { [agent.id]: agent }, modelAssignments: {}, variantAssignments: {} });

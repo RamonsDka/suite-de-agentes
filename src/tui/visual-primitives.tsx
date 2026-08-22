@@ -6,41 +6,31 @@ import type { AgentCatalogRow } from "../core/types.ts";
 import type { AppScreen } from "./agent-suite-nav.ts";
 import { createVisualTokens } from "./visual-tokens.ts";
 
-export type VisualScreenKind = "landing" | "catalog" | "info" | "modify" | "model" | "effort" | "delete" | "coordinator" | "ai-gate" | "ai-interview" | "ai-preview" | "skill-picker" | "error";
+export type VisualScreenKind = "catalog" | "info" | "provider" | "model" | "effort" | "error";
 
 export interface AgentInfoSection {
   title: string;
   fields: readonly (readonly [string, string])[];
 }
 
-export function screenKeyHints(kind: VisualScreenKind, capability?: { canDelete?: boolean; canDeactivate?: boolean; canReactivate?: boolean }): string {
+export function screenKeyHints(kind: VisualScreenKind): string {
   switch (kind) {
-    case "landing": return "↑↓ elige Catálogo · Crear agente · Configuración · Enter abre · F10 cierra";
-    case "catalog": return "/ buscar · click buscar · Enter resultados/Info · ↑↓ foco · Página ↑↓ · Esc volver";
-    case "info": return capability?.canDelete ? "F5 modifica/renombra · F8 elimina · Enter selecciona · Esc volver" : capability?.canDeactivate ? "F5 modifica · Desactivar · Enter selecciona · Esc volver" : capability?.canReactivate ? "Reactivar · Enter selecciona · Esc volver" : "F5 modifica · Enter selecciona · Esc volver";
-    case "modify": return "↑↓ navega · Enter selecciona · Esc volver";
+    case "catalog": return "/ buscar · click buscar · Enter abre agente · ↑↓ foco · Página ↑↓ · Esc/F10 cierra";
+    case "info": return "Cambiar modelo y esfuerzo · Enter selecciona · Esc volver";
+    case "provider": return "↑↓ navega · Enter selecciona · Esc volver";
     case "model":
     case "effort": return "↑↓ navega · Enter selecciona · Esc volver";
-    case "delete": return "↑↓ elige · Enter confirma · Esc cancela";
-    case "coordinator": return "↑↓ navega · Enter selecciona · Esc volver";
-    case "ai-gate": return "Configurar ahora · Cancelar · Enter selecciona · Esc volver";
-    case "ai-interview": return "↑↓ navega · Enter responde · Revisar propuesta · Esc cancelar";
-    case "ai-preview": return "Approve · Request changes · Discard · Enter selecciona · Esc volver";
-    case "skill-picker": return "Escribe para buscar · Enter agrega · Esc volver";
     case "error": return "Enter reintenta · Esc cierra";
   }
 }
 
 export function screenKeyHintsForScreen(screen: AppScreen): string {
-  if (screen.kind === "modify" && screen.edit.mode === "menu") return "F10 Finalizar · ↑↓ navega · Enter selecciona · Esc volver";
-  return screen.kind === "modify" && screen.edit?.mode !== undefined && screen.edit.mode !== "menu"
-    ? "Enter guardar · Esc cancelar"
-    : screenKeyHints(screen.kind);
+  return screenKeyHints(screen.kind);
 }
 
 export function keyHintPresentation(theme: Pick<TuiTheme, "current">, hints: string): RGBA {
   const tokens = createVisualTokens(theme.current);
-  return hints.includes("Finalizar") ? tokens.action.finalize : tokens.surface.mutedText;
+  return tokens.surface.mutedText;
 }
 
 export interface SearchInputPresentation {

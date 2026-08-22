@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiDialogSelectOption, TuiPlugin, TuiPluginApi, TuiSlotContext } from "@opencode-ai/plugin/tui";
-import type { AgentCatalogRow, CustomAgent, SuiteConfig } from "../core/types.ts";
-import type { RuntimeCoordinatorProvider } from "./screens/coordinator-config.tsx";
+import type { AgentCatalogRow, CustomAgent } from "../core/types.ts";
+import type { RuntimeModelProvider } from "./screens/model-select.tsx";
 import { normalizeEffortOptions } from "../core/effort.ts";
 import { defaultSuitePath } from "../core/persistence.ts";
 import { validateVariantId } from "../core/config.ts";
@@ -10,9 +10,6 @@ import { safeHostAction, safeSlotRender } from "./host-compat.ts";
 import { createAgentSuiteController, type AgentSuiteController } from "./agent-suite-controller.ts";
 import { handleAgentSuiteEscape, mountAgentSuite } from "./agent-suite-mount.tsx";
 import { formatCatalogName } from "./visual-tokens.ts";
-import { discoverInstalledSkills } from "./ai/skill-sources.ts";
-import { createCoordinatorSessionFromV2Client } from "./ai/coordinator-session.ts";
-import type { CoordinatorSession } from "../core/coordinator.ts";
 
 export const AGENT_SUITE_COMMAND = ":agent-suite";
 export const AGENT_SUITE_ESCAPE_COMMAND = "agent-suite.escape";
@@ -26,12 +23,8 @@ export function suiteSidebarLabel(): string {
   return `Suite de Agentes · Alt+S · v${PLUGIN_VERSION}`;
 }
 
-export function buildSuiteRootOptions(): Array<{ title: string; value: "catalog" | "create-agent" | "configuration" }> {
-  return [
-    { title: "Catálogo", value: "catalog" },
-    { title: "Crear agente", value: "create-agent" },
-    { title: "⚙ Configuración", value: "configuration" },
-  ];
+export function buildSuiteRootOptions(): Array<{ title: string; value: "catalog" }> {
+  return [{ title: "Catálogo de agentes", value: "catalog" }];
 }
 
 function catalogState(row: AgentCatalogRow): string {
@@ -48,8 +41,7 @@ export function catalogDetailMessage(row: AgentCatalogRow, customAgent?: CustomA
 
 export function buildCatalogActionOptions(row: AgentCatalogRow): TuiDialogSelectOption<string>[] {
   return [
-    { title: "Modificar", value: "modify" },
-    ...(row.membership === "custom" ? [{ title: "Eliminar", value: "delete" }] : []),
+    { title: "Cambiar modelo y esfuerzo", value: "assign-model" },
     { title: "Volver", value: "back" },
   ];
 }
@@ -77,16 +69,11 @@ export function getAvailableModelVariants(api: TuiPluginApi, modelID: string): s
   });
 }
 
-export function buildRuntimeCoordinatorProviders(api: TuiPluginApi): RuntimeCoordinatorProvider[] {
+export function buildRuntimeModelProviders(api: TuiPluginApi): RuntimeModelProvider[] {
   return api.state.provider.map((provider) => ({ id: provider.id, name: provider.name, models: Object.fromEntries(Object.entries(provider.models).map(([id, model]) => [id, { id, name: model.name, variants: (model as { variants?: Record<string, unknown> }).variants }])) }));
 }
 
 export type SuiteOpenFallback = () => void;
-
-export function coordinatorSessionForHost(api: { client?: unknown }): CoordinatorSession | undefined {
-  const client = api.client as { tool?: unknown; session?: unknown } | undefined;
-  return client?.tool && client.session ? createCoordinatorSessionFromV2Client(client as Parameters<typeof createCoordinatorSessionFromV2Client>[0]) : undefined;
-}
 
 type RegistrationApi = Pick<TuiPluginApi, "keymap">;
 type SlashRegistrationApi = Pick<TuiPluginApi, "command">;
@@ -111,9 +98,8 @@ function openNativeFallback(api: Pick<TuiPluginApi, "ui">): void {
 
 export function openAgentSuite(api: TuiPluginApi, fallback: SuiteOpenFallback = () => openNativeFallback(api)): void {
   const opened = safeHostAction("open Agent Suite", () => {
-    const runtimeModels = buildRuntimeModelOptions(api);
     const controller = controllerFactory(api);
-    mountAgentSuite({ theme: api.theme, ui: api.ui, modelOptions: (row) => buildAgentModelOptions(row, runtimeModels), variantOptions: (row, model) => buildAgentVariantOptions(row, model, getAvailableModelVariants(api, model)), coordinatorProviders: buildRuntimeCoordinatorProviders(api), installedSkills: () => discoverInstalledSkills(api.client), coordinatorSession: coordinatorSessionForHost(api), ingestPendingSkills: controller.ingestPendingSkills }, controller);
+    mountAgentSuite({ theme: api.theme, ui: api.ui, providers: buildRuntimeModelProviders(api), variantOptions: (model) => getAvailableModelVariants(api, model) }, controller);
     return true;
   }, false);
   if (!opened) fallback();
@@ -130,7 +116,7 @@ function registerKeymapLayer(api: RegistrationApi, open: () => void): (() => voi
     commands: [{
       name: AGENT_SUITE_COMMAND,
       title: "Suite de Agentes",
-      desc: "Abre Catálogo y Crear agente",
+      desc: "Abre el catálogo de agentes",
       category: "Agentes",
       nargs: "0",
       run: () => { open(); return true; },
@@ -162,7 +148,7 @@ function registerSlashCommand(api: SlashRegistrationApi, open: () => void): (() 
   return safeHostAction<(() => void) | false>("register slash command", () => api.command!.register(() => [{
     title: "Suite de Agentes",
     value: "agent-suite",
-    description: "Abre Catálogo y Crear agente",
+    description: "Abre el catálogo de agentes",
     category: "Agentes",
     slash: { name: "agent-suite" },
     onSelect: () => open(),

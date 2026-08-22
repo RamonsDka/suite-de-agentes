@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildIntegrationPlan } from "../src/core/skill-package.ts";
 import { globalSkillPath, installSkill } from "../src/core/skill-install.ts";
-import { integrationPlanRows } from "../src/tui/screens/plan-review.tsx";
 
 const pkg = { id: "safe-skill", source: "remote" as const, files: [{ path: "SKILL.md", content: "---\nname: safe-skill\ndescription: Safe checks\n---\n# New\n" }, { path: "references/check.md", content: "new reference" }] };
 const plan = () => buildIntegrationPlan(pkg, "active-agent");
@@ -14,7 +13,6 @@ describe("safe global skill installation", () => {
   it("writes only ~/.config/opencode/skills/{id}/SKILL.md after approval, validation, then scoped assignment", async () => {
     const root = home(); const events: string[] = []; const auditPath = join(root, "audit.jsonl");
     expect(globalSkillPath("safe-skill", root)).toBe(join(root, ".config", "opencode", "skills", "safe-skill", "SKILL.md"));
-    expect(integrationPlanRows(plan())).toEqual([["Skill", "safe-skill"], ["Agente", "active-agent"], ["Archivos", "SKILL.md, references/check.md"]]);
     await expect(installSkill(plan(), { home: root, auditPath, approved: true, validate: async () => { events.push("validate"); }, assign: async (agent, skill) => { events.push(`${agent}:${skill}`); } })).resolves.toMatchObject({ path: globalSkillPath("safe-skill", root) });
     expect(readFileSync(globalSkillPath("safe-skill", root), "utf8")).toContain("# New");
     expect(events).toEqual(["validate", "active-agent:safe-skill"]);

@@ -49,18 +49,10 @@ describe("namespace persistence", () => {
     expect(readFileSync(path, "utf8")).not.toContain("suites");
   });
 
-  it("round-trips a coordinator and preserves prior bytes when its validation fails", () => {
+  it("round-trips a legacy coordinator field without exposing it as a plugin feature", () => {
     const path = suitePath();
     const existing = { version: 1 as const, customAgents: {}, modelAssignments: {}, variantAssignments: {} };
     saveSuiteConfig(path, existing);
-    const savedBytes = readFileSync(path, "utf8");
-
-    expect(() => saveSuiteConfig(path, {
-      ...existing,
-      coordinator: { provider: "", model: "claude-sonnet-4-5" },
-    })).toThrow(/coordinator/i);
-    expect(readFileSync(path, "utf8")).toBe(savedBytes);
-
     const configured = {
       ...existing,
       coordinator: { provider: "anthropic", model: "claude-sonnet-4-5", effort: "extra-high" },

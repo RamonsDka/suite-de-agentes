@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { agentInfoSections } from "../src/tui/visual-primitives.tsx";
-import { AGENT_INFO_ACTIONS_LAYOUT, AGENT_INFO_DETAIL_LAYOUT, AGENT_INFO_LAYOUT, agentInfoDisplaySections, agentInfoStatus, formatAgentInfo, infoActionKeys } from "../src/tui/screens/agent-info.tsx";
+import { AGENT_INFO_ACTIONS_LAYOUT, AGENT_INFO_DETAIL_LAYOUT, AGENT_INFO_LAYOUT, agentInfoActions, agentInfoDisplaySections, agentInfoStatus, formatAgentInfo, infoActionKeys } from "../src/tui/screens/agent-info.tsx";
 
 const row = {
   id: "custom-agent",
@@ -25,8 +25,9 @@ describe("Agent Suite info screen", () => {
     ]);
   });
 
-  it("uses stable action-key intent and handles missing optional values", () => {
-    expect(infoActionKeys(row)).toEqual(["Renombrar", "F8 Eliminar", "Esc Volver"]);
+  it("uses the same read-only actions for every catalog row and handles missing optional values", () => {
+    expect(agentInfoActions()).toEqual(["Cambiar modelo y esfuerzo", "Volver"]);
+    expect(infoActionKeys(row)).toEqual(["Cambiar modelo y esfuerzo", "Volver"]);
     expect(formatAgentInfo({ ...row, model: undefined, variant: undefined, description: undefined, skills: [] }, undefined)).toEqual([
       "custom-agent",
       "Descripción: ninguna",
@@ -59,7 +60,7 @@ describe("Agent Suite info screen", () => {
     expect(agentInfoStatus({ ...row, membership: "seed", enabled: false })).toBe("info");
   });
 
-  it("keeps disabled base agents in the info flow with a reactivation action", () => {
-    expect(infoActionKeys({ ...row, membership: "seed", enabled: false, disabled: true })).toEqual(["Reactivar", "Esc Volver"]);
+  it("keeps disabled rows read-only too", () => {
+    expect(infoActionKeys({ ...row, membership: "seed", enabled: false, disabled: true })).toEqual(["Cambiar modelo y esfuerzo", "Volver"]);
   });
 });
