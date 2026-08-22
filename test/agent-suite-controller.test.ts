@@ -73,6 +73,27 @@ describe("Agent Suite controller adapter", () => {
     expect(controller.snapshot().rows).toEqual(expect.arrayContaining([expect.objectContaining({ id: "general", model: "anthropic/sonnet", variant: "high" })]));
   });
 
+  it("assigns a nested model with default effort to the GitHub agent", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
+    saveSuiteConfig(path, {
+      version: 1,
+      customAgents: {},
+      modelAssignments: { "agent-especialit-github": "opencode/x-preview-f-free" },
+      variantAssignments: { "agent-especialit-github": "low" },
+    });
+    const controller = createAgentSuiteController([], "1.0.1", { path, runtime: { "agent-especialit-github": { model: "opencode/x-preview-f-free" } } });
+
+    await controller.setModelAndEffort("agent-especialit-github", "cliproxyapi/google-1/gemini-3.7-flash-high", "");
+
+    expect(loadSuiteConfig(path)).toMatchObject({
+      modelAssignments: { "agent-especialit-github": "cliproxyapi/google-1/gemini-3.7-flash-high" },
+      variantAssignments: {},
+    });
+    const updated = controller.snapshot().rows.find((row) => row.id === "agent-especialit-github");
+    expect(updated).toMatchObject({ id: "agent-especialit-github", model: "cliproxyapi/google-1/gemini-3.7-flash-high" });
+    expect(updated).not.toHaveProperty("variant");
+  });
+
   it("commits a custom patch, persists it, migrates its materialized file, and rebuilds", async () => {
     const home = mkdtempSync(join(tmpdir(), "agent-suite-controller-home-"));
     const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
