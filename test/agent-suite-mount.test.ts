@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { handleAgentSuiteEscape, mountAgentSuite, registerAgentSuiteEscapeHandler, SUITE_DIALOG_SIZE, type DialogMountApi } from "../src/tui/agent-suite-mount.tsx";
 import { createAgentSuiteController } from "../src/tui/agent-suite-controller.ts";
 import { openAgentSuite, tui } from "../src/tui/index.tsx";
-import { SUITE_SHELL_BODY_LAYOUT, SUITE_SHELL_HEADER_LAYOUT, SUITE_SHELL_KEYBAR_LAYOUT, SUITE_SHELL_LAYOUT } from "../src/tui/screens/suite-shell.tsx";
+import { SUITE_SHELL_BODY_LAYOUT, SUITE_SHELL_HEADER_LAYOUT, SUITE_SHELL_KEYBAR_LAYOUT, SUITE_SHELL_LAYOUT, suiteShellLayout } from "../src/tui/screens/suite-shell.tsx";
 
 const mountedApp = vi.hoisted(() => ({ props: undefined as Record<string, unknown> | undefined }));
 vi.mock("../src/tui/agent-suite-app.tsx", () => ({ AgentSuiteApp: (props: Record<string, unknown>) => { mountedApp.props = props; return "agent-suite-content" as never; } }));
@@ -93,6 +93,8 @@ describe("Agent Suite dialog mount", () => {
     expect(SUITE_SHELL_HEADER_LAYOUT).toMatchObject({ flexShrink: 0 });
     expect(SUITE_SHELL_BODY_LAYOUT).toMatchObject({ flexGrow: 1, flexShrink: 1, minHeight: 0, overflow: "hidden", justifyContent: "flex-start" });
     expect(SUITE_SHELL_KEYBAR_LAYOUT).toMatchObject({ flexShrink: 0 });
+    expect(suiteShellLayout()).toMatchObject({ height: "auto" });
+    expect(suiteShellLayout(true)).toMatchObject({ height: "100%", width: "100%", maxHeight: "100%" });
   });
 
   it("exposes an active nested Escape handler to the host keymap path", () => {

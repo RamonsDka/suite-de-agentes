@@ -43,7 +43,7 @@ export function providerModelOptions(providers: readonly RuntimeModelProvider[],
 }
 
 export const MODEL_EMPTY_MESSAGE = "No hay modelos disponibles.";
-export const MODEL_VISIBLE_ROWS = 18;
+export const MODEL_VISIBLE_ROWS = 10;
 
 export function modelSelectionOptions(models: readonly string[]): Array<{ title: string; value: string }> {
   return models.map((model) => ({ title: model, value: model }));

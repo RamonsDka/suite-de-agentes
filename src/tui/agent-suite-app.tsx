@@ -175,7 +175,7 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
 
   const screen = () => navigationState().stack.at(-1) ?? initialNavState().stack[0]!;
   return (
-    <SuiteShell theme={props.theme} title={screenTitle(screen())} keybar={suiteScreenKeybar(screen(), Boolean(operationError()))}>
+    <SuiteShell theme={props.theme} title={screenTitle(screen())} keybar={suiteScreenKeybar(screen(), Boolean(operationError()))} fillHeight={screen().kind === "info"}>
       {busy() ? <StatusBadge theme={props.theme} status="info">Guardando modelo y esfuerzo…</StatusBadge> : null}
       {operationError() ? <ErrorPanel theme={props.theme} message={operationError()!} onRetry={() => setOperationError(undefined)} onClose={props.onClose} /> : (() => {
         const current = screen();

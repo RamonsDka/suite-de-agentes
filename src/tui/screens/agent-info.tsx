@@ -13,7 +13,7 @@ export interface AgentInfoProps {
 }
 
 export const AGENT_INFO_LAYOUT = { flexGrow: 1, flexShrink: 1, minWidth: 0, minHeight: 0, justifyContent: "center" as const, alignItems: "center" as const };
-export const AGENT_INFO_CONTENT_LAYOUT = { width: "100%" as const, maxHeight: "88%" as const, flexShrink: 1, minWidth: 0, minHeight: 0, gap: 1 };
+export const AGENT_INFO_CONTENT_LAYOUT = { width: "100%" as const, height: "100%" as const, flexShrink: 1, minWidth: 0, minHeight: 0, gap: 1 };
 export const AGENT_INFO_DETAIL_LAYOUT = { flexGrow: 1, flexShrink: 1, minWidth: 0, minHeight: 0, gap: 1, overflow: "scroll" as const };
 export const AGENT_INFO_ACTIONS_LAYOUT = { flexShrink: 0, minWidth: 0 };
 
