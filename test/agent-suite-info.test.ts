@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { agentInfoSections } from "../src/tui/visual-primitives.tsx";
-import { AGENT_INFO_ACTIONS_LAYOUT, AGENT_INFO_DETAIL_LAYOUT, AGENT_INFO_LAYOUT, agentInfoActions, agentInfoDisplaySections, agentInfoStatus, formatAgentInfo, infoActionKeys } from "../src/tui/screens/agent-info.tsx";
+import { AGENT_INFO_ACTIONS_LAYOUT, AGENT_INFO_CONTENT_LAYOUT, AGENT_INFO_DETAIL_LAYOUT, AGENT_INFO_LAYOUT, agentInfoActions, agentInfoDisplaySections, agentInfoStatus, formatAgentInfo, infoActionKeys } from "../src/tui/screens/agent-info.tsx";
 
 const row = {
   id: "custom-agent",
@@ -50,7 +50,8 @@ describe("Agent Suite info screen", () => {
     expect(displayed[3]?.fields[1]).toEqual(["Operaciones", longOperations]);
     expect(AGENT_INFO_DETAIL_LAYOUT).toMatchObject({ flexGrow: 1, flexShrink: 1, minHeight: 0, gap: 1, overflow: "scroll" });
     expect(AGENT_INFO_DETAIL_LAYOUT).not.toHaveProperty("maxHeight");
-    expect(AGENT_INFO_LAYOUT).toMatchObject({ flexGrow: 1, flexShrink: 1, minHeight: 0 });
+    expect(AGENT_INFO_LAYOUT).toMatchObject({ flexGrow: 1, flexShrink: 1, minHeight: 0, justifyContent: "center" });
+    expect(AGENT_INFO_CONTENT_LAYOUT).toMatchObject({ width: "100%", maxHeight: "88%", flexShrink: 1 });
     expect(AGENT_INFO_ACTIONS_LAYOUT).toMatchObject({ flexShrink: 0 });
   });
 

@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { reduceNav, type NavState } from "../src/tui/agent-suite-nav.ts";
 import { EffortSelect, effortSelectionOptions, effortSelectionRows } from "../src/tui/screens/effort-select.tsx";
-import { MODEL_EMPTY_MESSAGE, ModelSelect, modelSelectionCue, modelSelectionOptions, modelSelectionRows, providerModelOptions, providerSelectionOptions } from "../src/tui/screens/model-select.tsx";
+import { MODEL_EMPTY_MESSAGE, MODEL_VISIBLE_ROWS, ModelSelect, modelSelectionCue, modelSelectionOptions, modelSelectionRows, modelSelectionWindow, providerModelOptions, providerSelectionOptions } from "../src/tui/screens/model-select.tsx";
 import { applyModelAssignment, eventForKey } from "../src/tui/agent-suite-app.tsx";
-import { buildAgentModelOptions, buildAgentVariantOptions, buildRuntimeModelOptions } from "../src/tui/index.tsx";
+import { buildAgentModelOptions, buildAgentVariantOptions, buildRuntimeModelOptions, buildRuntimeModelProviders, getAvailableModelVariants } from "../src/tui/index.tsx";
 import { selectionErrorPresentation } from "../src/tui/visual-primitives.tsx";
 
 const row = { id: "general", membership: "seed" as const, enabled: true, model: "anthropic/sonnet", variant: "high", skills: [], consent: "explicit-current-turn" as const };
@@ -90,5 +90,37 @@ describe("Agent Suite model and effort screens", () => {
     expect(busy).toEqual([true, false]);
     expect(dispatch).toHaveBeenCalledWith({ type: "ASSIGNMENT_SAVED" });
     expect(reduceNav(state, { type: "SELECT_MODEL", model: "anthropic/claude-sonnet" }).stack.at(-1)?.kind).toBe("effort");
+  });
+
+  it("uses the stable model id instead of a display/map key containing whitespace", () => {
+    const api = {
+      state: {
+        provider: [{
+          id: "cliproxyapi",
+          name: "CLI Proxy API",
+          models: {
+            "GPT_cuenta.1: 5.6-LUNA": { id: "gpt-cuenta-1-5.6-luna", name: "GPT_cuenta.1: 5.6-LUNA", variants: { high: {} } },
+          },
+        }],
+      },
+    } as never;
+
+    expect(buildRuntimeModelProviders(api)[0]?.models).toEqual({
+      "gpt-cuenta-1-5.6-luna": { id: "gpt-cuenta-1-5.6-luna", name: "GPT_cuenta.1: 5.6-LUNA", variants: { high: {} } },
+    });
+    expect(providerModelOptions(buildRuntimeModelProviders(api), "cliproxyapi")).toEqual([
+      { title: "GPT_cuenta.1: 5.6-LUNA", value: "cliproxyapi/gpt-cuenta-1-5.6-luna" },
+    ]);
+    expect(getAvailableModelVariants(api, "cliproxyapi/gpt-cuenta-1-5.6-luna")).toEqual(["high"]);
+  });
+
+  it("keeps the focused model inside a bounded scrolling window", () => {
+    const options = Array.from({ length: 30 }, (_, index) => ({ title: `Model ${index + 1}`, value: `provider/model-${index + 1}` }));
+
+    expect(MODEL_VISIBLE_ROWS).toBe(18);
+    expect(modelSelectionWindow(options, 0).rows.map(({ option }) => option.value)).toEqual(options.slice(0, MODEL_VISIBLE_ROWS).map(({ value }) => value));
+    expect(modelSelectionWindow(options, 18)).toMatchObject({ start: 1, end: 19 });
+    expect(modelSelectionWindow(options, 29)).toMatchObject({ start: 12, end: 30 });
+    expect(modelSelectionWindow(options, 29).rows.at(-1)?.option.value).toBe("provider/model-30");
   });
 });
