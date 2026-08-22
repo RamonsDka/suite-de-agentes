@@ -114,13 +114,49 @@ describe("Agent Suite model and effort screens", () => {
     expect(getAvailableModelVariants(api, "cliproxyapi/gpt-cuenta-1-5.6-luna")).toEqual(["high"]);
   });
 
+  it("keeps every valid nested model path published by a provider", () => {
+    const api = {
+      state: {
+        provider: [{
+          id: "cliproxyapi",
+          name: "CLI Proxy API",
+          models: {
+            "GPT_cuenta.1: 5.6-LUNA": { id: "cliproxyapi/cuenta-1/gpt-5.6-luna", name: "GPT_cuenta.1: 5.6-LUNA", variants: { high: {} } },
+            "GEMINI_cuenta.7: 3.7-flash-high": { id: "cuenta-7/gemini-3.7-flash-high", name: "GEMINI_cuenta.7: 3.7-flash-high", variants: { medium: {} } },
+          },
+        }],
+      },
+    } as never;
+
+    expect(providerModelOptions(buildRuntimeModelProviders(api), "cliproxyapi")).toEqual([
+      { title: "GPT_cuenta.1: 5.6-LUNA", value: "cliproxyapi/cuenta-1/gpt-5.6-luna" },
+      { title: "GEMINI_cuenta.7: 3.7-flash-high", value: "cliproxyapi/cuenta-7/gemini-3.7-flash-high" },
+    ]);
+    expect(getAvailableModelVariants(api, "cliproxyapi/cuenta-7/gemini-3.7-flash-high")).toEqual(["medium"]);
+  });
+
   it("keeps the focused model inside a bounded scrolling window", () => {
     const options = Array.from({ length: 30 }, (_, index) => ({ title: `Model ${index + 1}`, value: `provider/model-${index + 1}` }));
 
-    expect(MODEL_VISIBLE_ROWS).toBe(18);
+    expect(MODEL_VISIBLE_ROWS).toBe(10);
     expect(modelSelectionWindow(options, 0).rows.map(({ option }) => option.value)).toEqual(options.slice(0, MODEL_VISIBLE_ROWS).map(({ value }) => value));
-    expect(modelSelectionWindow(options, 18)).toMatchObject({ start: 1, end: 19 });
-    expect(modelSelectionWindow(options, 29)).toMatchObject({ start: 12, end: 30 });
+    expect(modelSelectionWindow(options, 10)).toMatchObject({ start: 1, end: 11 });
+    expect(modelSelectionWindow(options, 29)).toMatchObject({ start: 20, end: 30 });
     expect(modelSelectionWindow(options, 29).rows.at(-1)?.option.value).toBe("provider/model-30");
+  });
+
+  it("retains and windows a full 45-model provider catalog", () => {
+    const models = Object.fromEntries(Array.from({ length: 45 }, (_, index) => {
+      const id = `cuenta-${Math.floor(index / 3) + 1}/model-${index + 1}`;
+      return [`Display model ${index + 1}`, { id, name: `Display model ${index + 1}` }];
+    }));
+    const api = { state: { provider: [{ id: "cliproxyapi", name: "CLIProxyAPI", models }] } } as never;
+    const options = providerModelOptions(buildRuntimeModelProviders(api), "cliproxyapi");
+
+    expect(options).toHaveLength(45);
+    expect(modelSelectionWindow(options, 0)).toMatchObject({ start: 0, end: 10 });
+    expect(modelSelectionWindow(options, 22)).toMatchObject({ start: 13, end: 23 });
+    expect(modelSelectionWindow(options, 44)).toMatchObject({ start: 35, end: 45 });
+    expect(modelSelectionWindow(options, 44).rows.at(-1)?.option.value).toContain("cliproxyapi/");
   });
 });

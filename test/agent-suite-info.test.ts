@@ -51,7 +51,8 @@ describe("Agent Suite info screen", () => {
     expect(AGENT_INFO_DETAIL_LAYOUT).toMatchObject({ flexGrow: 1, flexShrink: 1, minHeight: 0, gap: 1, overflow: "scroll" });
     expect(AGENT_INFO_DETAIL_LAYOUT).not.toHaveProperty("maxHeight");
     expect(AGENT_INFO_LAYOUT).toMatchObject({ flexGrow: 1, flexShrink: 1, minHeight: 0, justifyContent: "center" });
-    expect(AGENT_INFO_CONTENT_LAYOUT).toMatchObject({ width: "100%", maxHeight: "88%", flexShrink: 1 });
+    expect(AGENT_INFO_CONTENT_LAYOUT).toMatchObject({ width: "100%", height: "100%", flexShrink: 1 });
+    expect(AGENT_INFO_CONTENT_LAYOUT).not.toHaveProperty("maxHeight");
     expect(AGENT_INFO_ACTIONS_LAYOUT).toMatchObject({ flexShrink: 0 });
   });
 

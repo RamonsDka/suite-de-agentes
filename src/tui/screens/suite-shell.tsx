@@ -9,6 +9,7 @@ export interface SuiteShellProps {
   title: string;
   children?: JSX.Element;
   keybar?: string;
+  fillHeight?: boolean;
 }
 
 export const SUITE_SHELL_LAYOUT = {
@@ -28,11 +29,17 @@ export const SUITE_SHELL_HEADER_LAYOUT = { flexShrink: 0, maxWidth: "100%" as co
 export const SUITE_SHELL_BODY_LAYOUT = { flexGrow: 1, flexShrink: 1, minWidth: 0, minHeight: 0, maxWidth: "100%" as const, overflow: "hidden" as const, justifyContent: "flex-start" as const };
 export const SUITE_SHELL_KEYBAR_LAYOUT = { flexShrink: 0, maxWidth: "100%" as const, overflow: "hidden" as const };
 
+export type SuiteShellLayout = Omit<typeof SUITE_SHELL_LAYOUT, "height"> & { height: "auto" | "100%" };
+
+export function suiteShellLayout(fillHeight = false): SuiteShellLayout {
+  return fillHeight ? { ...SUITE_SHELL_LAYOUT, height: "100%" } : SUITE_SHELL_LAYOUT;
+}
+
 export function SuiteShell(props: SuiteShellProps): JSX.Element {
   const colors = () => props.theme.current;
   const tokens = () => createVisualTokens(props.theme.current);
   return (
-    <box {...SUITE_SHELL_LAYOUT} flexDirection="column" backgroundColor={colors().background} borderColor={tokens().indicator} padding={0}>
+    <box {...suiteShellLayout(props.fillHeight)} flexDirection="column" backgroundColor={colors().background} borderColor={tokens().indicator} padding={0}>
       <box {...SUITE_SHELL_HEADER_LAYOUT} justifyContent="center" backgroundColor={colors().backgroundPanel} paddingX={1}>
         <text fg={tokens().indicator} attributes={createTextAttributes({ bold: true })}>{props.title}</text>
       </box>

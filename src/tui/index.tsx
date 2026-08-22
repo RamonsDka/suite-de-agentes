@@ -87,8 +87,8 @@ export function buildRuntimeModelProviders(api: TuiPluginApi): RuntimeModelProvi
 function stableRuntimeModelId(providerId: string, key: string, model: { id?: string }): string | undefined {
   for (const candidate of [model.id, key]) {
     if (typeof candidate !== "string" || !candidate.trim() || /\s/.test(candidate)) continue;
-    const normalized = candidate.includes("/") ? candidate.slice(candidate.indexOf("/") + 1) : candidate;
-    if (normalized && !/\s/.test(normalized) && !normalized.includes("/")) return normalized;
+    const normalized = candidate.startsWith(`${providerId}/`) ? candidate.slice(providerId.length + 1) : candidate;
+    if (normalized.split("/").every((segment) => segment && segment !== "." && segment !== ".." && !/\s/.test(segment))) return normalized;
   }
   return undefined;
 }
