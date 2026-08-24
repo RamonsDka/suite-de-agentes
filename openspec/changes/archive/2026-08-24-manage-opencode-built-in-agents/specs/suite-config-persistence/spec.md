@@ -1,14 +1,15 @@
-# Suite Config Persistence Specification
+# Delta for Suite Config Persistence
 
-## Purpose
-
-Persist the independent Suite agent registry and its per-agent model and effort assignments without silently discarding legacy data.
-
-## Requirements
+## ADDED Requirements
 
 ### Requirement: Validate Built-In Overrides and Configuration Migration
 
 The system MUST validate built-in overrides (`builtInOverrides`), disabled agent IDs (`disabledAgents`), and advanced override flags (`advancedOverrides`) prior to persistence. If legacy keys such as `baseOverrides` are encountered in configuration, the system MUST automatically migrate them to `builtInOverrides` without loss of user customizations. Invalid built-in override keys or non-existent built-in IDs MUST be rejected before writing.
+
+#### Acceptance & Edge Case Checklist
+- [ ] Validates `builtInOverrides`, `disabledAgents`, and `advancedOverrides`.
+- [ ] Automatically migrates legacy `baseOverrides` to `builtInOverrides`.
+- [ ] Rejects malformed override payloads before disk persistence.
 
 #### Scenario: Migrate legacy baseOverrides
 - GIVEN a persisted configuration containing legacy `baseOverrides` for `build`
@@ -21,9 +22,20 @@ The system MUST validate built-in overrides (`builtInOverrides`), disabled agent
 - WHEN configuration validation is executed
 - THEN persistence is blocked with a validation error
 
+## MODIFIED Requirements
+
 ### Requirement: Minimal registry shape
 
 The persisted configuration MUST contain `version`, `customAgents`, an optional `coordinator` object, optional `builtInOverrides`, optional `disabledAgents`, and optional `advancedOverrides`. The system MUST default to `{ version: 1, customAgents: {}, builtInOverrides: {}, disabledAgents: [], advancedOverrides: {} }` when no configuration exists, MUST preserve existing configurations lacking optional sections without error, and MUST reject unknown legacy suite/profile fields.
+(Previously: The persisted configuration contained only version, customAgents, and optional coordinator without built-in agent overrides or disabled agent lists.)
+
+**User Story:** As a developer, I want the configuration schema to support optional coordinator settings so that existing agent registries remain backward-compatible.
+
+#### Acceptance & Edge Case Checklist
+- [ ] Existing configuration files without coordinator or built-in overrides load cleanly without error.
+- [ ] Optional coordinator object `{ provider, model, effort? }` is accepted.
+- [ ] Optional `builtInOverrides`, `disabledAgents`, and `advancedOverrides` are accepted.
+- [ ] Legacy suite/profile fields remain rejected.
 
 #### Scenario: Read the minimal shape
 
@@ -37,35 +49,3 @@ The persisted configuration MUST contain `version`, `customAgents`, an optional 
 - WHEN the registry is loaded
 - THEN default empty registry shape with version `1` is returned
 - AND no global OpenCode or SDD configuration is changed
-
-### Requirement: Legacy coordinator compatibility
-
-An optional legacy `coordinator` field MAY be present in persisted configuration. The system MUST preserve it as opaque compatibility data when loading and saving, but MUST NOT validate its internal shape, expose it through current controller or TUI APIs, or treat it as an active feature.
-
-#### Scenario: Round-trip legacy data
-
-- GIVEN a valid Suite registry that includes a legacy `coordinator` field
-- WHEN the registry is loaded and saved as part of another valid change
-- THEN the legacy field is retained without becoming a current configuration surface
-
-### Requirement: Safe legacy handling
-
-An empty legacy suite configuration MAY be replaced by a successful valid write. A legacy configuration containing real suite assignments or model mappings MUST be rejected visibly in Spanish, left untouched, and never silently migrated.
-
-#### Scenario: Reject non-empty legacy assignments
-
-- GIVEN legacy suite data contains an agent-to-model assignment
-- WHEN it is loaded or saved
-- THEN the operation fails with a clear Spanish rejection
-- AND no write or automatic migration occurs
-
-### Requirement: Agent validation and atomic writes
-
-The registry MUST validate custom-agent identifiers, membership collisions, models, variants, base overrides, and disabled-agent references before persisting. Writes MUST be atomic: readers observe either the prior complete configuration or the new complete configuration, never a partial file.
-
-#### Scenario: Failed save preserves data
-
-- GIVEN a configuration fails validation or cannot complete its write
-- WHEN persistence reports the error
-- THEN the prior persisted bytes remain available
-- AND no agent registry or assignment data is lost
