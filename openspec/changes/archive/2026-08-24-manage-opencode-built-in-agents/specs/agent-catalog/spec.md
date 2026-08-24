@@ -1,25 +1,16 @@
-# Agent Catalog Specification
+# Delta for Agent Catalog
 
-## Purpose
-
-Provide a focused Suite de Agentes catalog for inspecting owned agents and assigning their runtime model and effort. Agent definitions are managed outside the TUI by the user's orchestrator.
-
-## Requirements
-
-### Requirement: Direct catalog entry
-
-Pressing `Alt+S`, invoking `/agent-suite`, or selecting the Suite command MUST open the searchable catalog directly. The TUI MUST NOT show a landing screen, creation action, configuration root, or coordinator setup.
-
-#### Scenario: Open the Suite
-
-- GIVEN the plugin is loaded
-- WHEN the user opens Suite de Agentes with `Alt+S`
-- THEN the first visible screen is the Spanish catalog
-- AND no landing, create-agent, or configuration choice is displayed
+## MODIFIED Requirements
 
 ### Requirement: Scoped catalog membership
 
 The catalog MUST include all active controllable OpenCode built-in agents (canonical set `general`, `build`, `plan`, `explore`, `compaction`, `title`, `summary` and discovered built-ins), seed member `agent-especialit-github`, and custom agents created through this plugin. Disabled agents MUST be omitted from active catalog listings. The catalog MUST exclude external orchestrator and framework agents, including `gentle-orchestrator`, IDs beginning with `sdd-`, `review-`, or `jd-`, and IDs ending with `-fallback`.
+(Previously: The catalog included only seed members general and agent-especialit-github plus custom agents.)
+
+#### Acceptance & Edge Case Checklist
+- [ ] Lists active canonical and discovered built-in agents alongside custom agents.
+- [ ] Omits disabled agents from active catalog view.
+- [ ] Excludes orchestrator, SDD, review, Judgment Day, and fallback agents.
 
 #### Scenario: Filter the runtime inventory
 
@@ -35,20 +26,15 @@ The catalog MUST include all active controllable OpenCode built-in agents (canon
 - THEN the seed remains listed with a not-materialized/unavailable state
 - AND the catalog does not replace it with an unrelated runtime agent
 
-### Requirement: Searchable Spanish catalog and preserved details
-
-The catalog MUST preserve the incumbent compact Spanish search, pagination, list, and detail presentation. Search MUST filter catalog names case-insensitively. Agent details MUST display identity, description, skills, operations, status, current model, and current effort.
-
-#### Scenario: Inspect a filtered agent
-
-- GIVEN multiple catalog members exist
-- WHEN the user searches by a partial agent name and opens a matching row
-- THEN only matching rows are listed
-- AND the existing structured detail layout displays the agent's current data
-
 ### Requirement: Spanish compact catalog interaction
 
 The catalog MUST be compact, scrollable, and Spanish. Each row MUST expose detail actions appropriate to its type: edit, baseline restore, and disable toggles for built-in agents; edit, delete, and materialization actions for custom agents. Disabled agents MUST NOT be selectable for execution.
+(Previously: Row actions were limited to member detail and custom materialization/deletion without built-in editing or disable toggles.)
+
+#### Acceptance & Edge Case Checklist
+- [ ] Exposes edit, baseline restore, and disable actions for built-ins.
+- [ ] Preserves materialization and delete actions for custom members.
+- [ ] Prevents execution of disabled agents.
 
 #### Scenario: Inspect and materialize a custom member
 
@@ -64,22 +50,15 @@ The catalog MUST be compact, scrollable, and Spanish. Each row MUST expose detai
 - THEN a compact Spanish empty-state message is shown
 - AND the surface remains navigable back to the two-option root
 
-### Requirement: Atomic provider-model-effort assignment
-
-Selecting `Cambiar modelo y esfuerzo` MUST guide the user through provider, model, and effort screens. Models MUST be limited to the selected provider and use fully-qualified `provider/model` values. Effort choices MUST be derived from the selected model's supported variants.
-
-The final effort selection MUST persist model and effort through one atomic controller mutation, refresh the catalog data, and return to the same agent's info screen. The TUI MUST NOT persist model and effort through separate mutations.
-
-#### Scenario: Change an assignment
-
-- GIVEN an agent detail screen and runtime providers with supported model variants
-- WHEN the user selects a provider, a model, and an effort level
-- THEN the saved assignment contains the selected fully-qualified model and effort together
-- AND the user returns to the same read-only agent detail screen
-
 ### Requirement: Exact current-turn consent
 
 The change MUST require explicit session-scoped confirmation grants before any agent automatically dispatches tasks to controllable Suite de Agentes members, while allowing direct manual user invocation without confirmation. The configured internal Gentle-AI system remains the maintainer-authorized exception for its exact primary/fallback SDD, review/refuter, and Judgment Day names.
+(Previously: Required exact same-turn text 'usa también agente: <id>' for all invocations of user-controlled members.)
+
+#### Acceptance & Edge Case Checklist
+- [ ] Requires session-scoped consent for automated dispatch to user-controlled agents.
+- [ ] Permits direct manual selection without consent prompt.
+- [ ] Maintains authorized exception for exact configured internal SDD/review/JD agents.
 
 #### Scenario: Invoke without and with consent
 
