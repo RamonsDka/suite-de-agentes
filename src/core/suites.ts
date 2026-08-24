@@ -1,12 +1,12 @@
-import type { AgentCatalogRow, BaseAgentOverride, CustomAgent } from "./types.ts";
+import type { AgentCatalogRow, BuiltInOverride, CustomAgent } from "./types.ts";
 import { restoreBuiltInBaseline } from "./built-in-agents.ts";
 
 export const SUITE_DE_AGENTES_SEED = ["general", "agent-especialit-github"] as const;
 
 export function restoreBuiltInAgentOverride(
   id: string,
-  overrides: Record<string, BaseAgentOverride> = {},
-): Record<string, BaseAgentOverride> {
+  overrides: Record<string, BuiltInOverride> = {},
+): Record<string, BuiltInOverride> {
   return restoreBuiltInBaseline(id, overrides);
 }
 
@@ -16,7 +16,7 @@ export function buildSuiteDeAgentesCatalog(
   seed: readonly string[] = SUITE_DE_AGENTES_SEED,
   modelAssignments: Record<string, string> = {},
   variantAssignments: Record<string, string> = {},
-  baseOverrides: Record<string, BaseAgentOverride> = {},
+  builtInOverrides: Record<string, BuiltInOverride> = {},
   disabledAgents: readonly string[] = [],
 ): AgentCatalogRow[] {
   const seedIDs = new Set(seed);
@@ -25,7 +25,7 @@ export function buildSuiteDeAgentesCatalog(
   return [...memberIDs].map((id): AgentCatalogRow => {
     const runtimeAgent = runtime[id];
     const customAgent = custom[id];
-    const override = baseOverrides[id] ?? {};
+    const override = builtInOverrides[id] ?? {};
     const row: AgentCatalogRow = {
       id,
       membership: seedIDs.has(id) ? "seed" : "custom",

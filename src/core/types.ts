@@ -58,7 +58,6 @@ export interface SuiteConfig {
   customAgents: Record<string, CustomAgent>;
   modelAssignments: Record<string, string>;
   variantAssignments: Record<string, string>;
-  baseOverrides?: Record<string, BaseAgentOverride>;
   builtInOverrides?: Record<string, BuiltInOverride>;
   disabledAgents?: string[];
   advancedOverrides?: AdvancedOverrides;
@@ -80,5 +79,21 @@ export interface AgentCatalogRow {
 }
 
 export interface RuntimeMessage { sessionID: string; messageID: string; role?: string; parts?: unknown[]; text?: string; }
-export interface TaskGateInput { sessionAgent?: string; target: string; sessionID: string; messageID: string; ledger?: { has(sessionID: string, messageID: string, target: string): boolean }; }
+export interface SessionGrant {
+  id: string;
+  sessionID: string;
+  requester: string;
+  target: string;
+  purpose: string;
+  operation: string;
+  duration: "current-session";
+}
+export interface TaskGateInput {
+  sessionAgent?: string;
+  target: string;
+  sessionID: string;
+  messageID: string;
+  knownAgents?: readonly string[];
+  ledger?: { has(sessionID: string, requester: string, target: string): boolean };
+}
 export interface TaskGateDecision { allowed: boolean; reason?: string; }

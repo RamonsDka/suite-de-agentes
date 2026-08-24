@@ -52,7 +52,7 @@ export function createAgentSuiteController(
   let config: SuiteConfig = options.path ? loadSuiteConfig(options.path) : { version: 1, customAgents: { ...rowCustomAgents, ...(options.custom ?? {}) }, modelAssignments: {}, variantAssignments: {} };
   const runtime = options.runtime ?? Object.fromEntries(currentRows.map((row) => [row.id, { model: row.model, variant: row.variant, description: row.description, prompt: row.operations, skills: row.skills }]));
   const rebuild = () => {
-    const allRows = buildSuiteDeAgentesCatalog(runtime, config.customAgents, seed, config.modelAssignments, config.variantAssignments, config.baseOverrides, config.disabledAgents);
+    const allRows = buildSuiteDeAgentesCatalog(runtime, config.customAgents, seed, config.modelAssignments, config.variantAssignments, config.builtInOverrides, config.disabledAgents);
     currentRows = allRows.filter((row) => row.disabled !== true);
     disabledRows = allRows.filter((row) => row.disabled === true);
   };
@@ -181,6 +181,6 @@ export function createAgentSuiteController(
     setSkills: async (id, skills) => mutation(() => { const agent = config.customAgents[id]; if (!agent) throw new Error(`Unknown custom agent: ${id}`); agent.skills = [...skills]; }),
     setOperations: async (id, prompt) => mutation(() => { const agent = config.customAgents[id]; if (!agent) throw new Error(`Unknown custom agent: ${id}`); agent.prompt = prompt; }),
     patchAgent,
-    operations: (id) => config.customAgents[id]?.prompt ?? config.baseOverrides?.[id]?.operations,
+    operations: (id) => config.customAgents[id]?.prompt ?? config.builtInOverrides?.[id]?.operations,
   };
 }
