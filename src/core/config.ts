@@ -87,7 +87,6 @@ export function patchCustomAgent(config: SuiteConfig, id: string, patch: AgentPa
     customAgents,
     modelAssignments,
     variantAssignments,
-    ...(config.baseOverrides === undefined ? {} : { baseOverrides: { ...config.baseOverrides } }),
     ...(config.disabledAgents === undefined ? {} : { disabledAgents: [...config.disabledAgents] }),
   };
 }
@@ -96,12 +95,12 @@ export function patchBaseAgent(config: SuiteConfig, id: string, patch: AgentPatc
   validateAgentId(id);
   if (!SUITE_DE_AGENTES_SEED.includes(id as (typeof SUITE_DE_AGENTES_SEED)[number])) throw new Error(`Unknown base agent: ${id}`);
   if (patch.newId !== undefined && patch.newId !== id) throw new Error(`Protected base agent ID cannot be renamed: ${id}`);
-  const prior = config.baseOverrides?.[id] ?? {};
+  const prior = config.builtInOverrides?.[id] ?? {};
   const next: BaseAgentOverride = { ...prior };
   if (patch.description !== undefined) next.description = patch.description;
   if (patch.skills !== undefined) next.skills = patch.skills.map(validateSkillId);
   if (patch.operations !== undefined) next.operations = patch.operations;
-  return { ...config, baseOverrides: { ...(config.baseOverrides ?? {}), [id]: next } };
+  return { ...config, builtInOverrides: { ...(config.builtInOverrides ?? {}), [id]: next } };
 }
 
 function record(value: unknown, label: string): Record<string, unknown> {
@@ -164,7 +163,7 @@ export function parseSuiteConfig(value: unknown): SuiteConfig {
     const overrides: Record<string, BuiltInOverride> = {};
     for (const [agentID, raw] of Object.entries(overridesRaw)) {
       validateAgentId(agentID);
-      if (!isCanonicalBuiltInAgent(agentID)) throw new Error(`Built-in override must target a canonical built-in agent: ${agentID}`);
+      if (!isCanonicalBuiltInAgent(agentID) && !SUITE_DE_AGENTES_SEED.includes(agentID as (typeof SUITE_DE_AGENTES_SEED)[number])) throw new Error(`Built-in override must target a canonical built-in agent: ${agentID}`);
       const override = safeRecord(raw, `${label} ${agentID}`);
       const parsed: BuiltInOverride = {};
       if (override.description !== undefined) {

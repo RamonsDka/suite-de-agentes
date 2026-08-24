@@ -1,4 +1,5 @@
 import type { PermissionValue, TaskGateDecision, TaskGateInput } from "./types.ts";
+export { ConsentLedger } from "./grants.ts";
 
 export const SDD_AGENT_ALLOWLIST = [
   "sdd-init", "sdd-explore", "sdd-onboard", "sdd-propose", "sdd-spec",
@@ -39,10 +40,11 @@ export function isAuthorizedInternalAgent(target: string): boolean {
 
 export function decideTaskGate(input: TaskGateInput & { disabledAgents?: readonly string[] }): TaskGateDecision {
   if (input.disabledAgents?.includes(input.target)) return { allowed: false, reason: `Disabled agent '${input.target}' cannot be dispatched.` };
-  if (input.sessionAgent !== SDD_ORCHESTRATOR) return { allowed: true, reason: "suite policy is scoped to gentle-orchestrator" };
   if (isAuthorizedInternalAgent(input.target)) return { allowed: true, reason: "exact internal allowlist" };
-  if (input.ledger?.has(input.sessionID, input.messageID, input.target)) return { allowed: true, reason: "explicit current-message grant" };
-  return { allowed: false, reason: `Blocked agent '${input.target}'. Add exactly 'usa también agente: ${input.target}' to the current message.` };
+  if (!input.sessionAgent || (input.sessionAgent !== SDD_ORCHESTRATOR && !input.knownAgents?.includes(input.sessionAgent))) return { allowed: false, reason: "Blocked dispatch from an unknown requester." };
+  if (!input.knownAgents?.includes(input.target)) return { allowed: false, reason: `Blocked agent '${input.target}': target is unknown.` };
+  if (input.ledger?.has(input.sessionID, input.sessionAgent, input.target)) return { allowed: true, reason: "active session grant" };
+  return { allowed: false, reason: `Blocked agent '${input.target}': an active session grant is required.` };
 }
 
 export function transformTaskPermission(disabledAgents: readonly string[] = []): Record<string, PermissionValue> {

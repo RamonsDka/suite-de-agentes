@@ -3,6 +3,7 @@ import { messageText, parseCanonicalConsent } from "../core/grants.ts";
 import { decideTaskGate, SDD_ORCHESTRATOR, transformTaskPermission } from "../core/policy.ts";
 import { defaultSuitePath, loadSuiteConfig } from "../core/persistence.ts";
 import type { Config as PluginConfig, Plugin, PluginInput, PluginModule } from "@opencode-ai/plugin";
+import type { Event } from "@opencode-ai/sdk";
 import type { Part } from "@opencode-ai/sdk";
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -50,7 +51,7 @@ export function applyRuntimeModelAssignments(config: PluginConfig, assignments: 
   }
 }
 
-export function applyRuntimeBaseOverrides(config: PluginConfig, overrides: Record<string, { description?: string; skills?: string[]; operations?: string }>): void {
+export function applyRuntimeBuiltInOverrides(config: PluginConfig, overrides: Record<string, { description?: string; skills?: string[]; operations?: string }>): void {
   const runtimeConfig = config as RuntimePluginConfig;
   for (const [agentID, override] of Object.entries(overrides)) {
     const agent = runtimeConfig.agent?.[agentID];
@@ -91,12 +92,12 @@ export function createAgentSuiteServer(options: AgentSuiteServerOptions = {}) {
         currentTurns.delete(input.sessionID);
         return;
       }
-      currentTurns.set(input.sessionID, { messageID, agent: input.agent ?? output.message?.agent });
+       const sessionAgent = input.agent ?? output.message?.agent ?? await options.sessionAgent?.(input.sessionID);
+       currentTurns.set(input.sessionID, { messageID, agent: sessionAgent });
       const state = readSecurityState();
-      const disabled = new Set(state.disabledAgents);
+       const disabled = new Set(state.disabledAgents);
       const known = state.available ? knownAgents().filter((agent) => !disabled.has(agent)) : [];
-      registerMessageGrant(ledger, { sessionID: input.sessionID, messageID, parts: output.parts }, known);
-      const sessionAgent = input.agent ?? output.message?.agent;
+      registerMessageGrant(ledger, { sessionID: input.sessionID, messageID, parts: output.parts }, known, sessionAgent);
       if (sessionAgent === SDD_ORCHESTRATOR) {
         const text = messageText({ sessionID: input.sessionID, messageID, parts: output.parts });
         const existing = new Set(output.parts.flatMap((part) => part.type === "agent" ? [part.name] : []));
@@ -124,10 +125,25 @@ export function createAgentSuiteServer(options: AgentSuiteServerOptions = {}) {
       if (!sessionAgent) throw new Error("Suite de Agentes: cannot resolve the session agent for the current turn");
       const target = typeof output.args.subagent_type === "string" ? output.args.subagent_type : "";
       if (!target && sessionAgent === SDD_ORCHESTRATOR) throw new Error("Suite de Agentes: task target subagent_type is missing");
-      const decision = decideTaskGate({ sessionAgent, target, sessionID: input.sessionID, messageID: turn.messageID, ledger, disabledAgents });
-      if (!decision.allowed && (sessionAgent === SDD_ORCHESTRATOR || disabledAgents.includes(target))) throw new Error(`Suite de Agentes: ${decision.reason}`);
+       const decision = decideTaskGate({ sessionAgent, target, sessionID: input.sessionID, messageID: turn.messageID, ledger, disabledAgents, knownAgents: [SDD_ORCHESTRATOR, ...knownAgents().filter((agent) => !disabledAgents.includes(agent))] });
+       if (!decision.allowed) throw new Error(`Suite de Agentes: ${decision.reason}`);
     },
     "tool.execute.after": async () => undefined,
+    "command.execute.before": async (input: { command: string; sessionID: string; arguments: string }, output: { parts: Part[] }) => {
+      if (input.command === "agent-suite-grants") {
+        const grants = ledger.list(input.sessionID);
+        output.parts.push({ type: "text", text: grants.length ? grants.map((grant) => `${grant.id} ${grant.requester} -> ${grant.target} (${grant.purpose}; ${grant.duration})`).join("\n") : "No active session grants." } as Part);
+      }
+      if (input.command === "agent-suite-revoke") ledger.revokeTarget(input.sessionID, input.arguments.trim());
+    },
+    event: async (input: { event: Event }) => {
+      if (input.event.type === "session.deleted") {
+        const sessionID = input.event.properties.info.id;
+        if (sessionID) { ledger.clearSession(sessionID); currentTurns.delete(sessionID); }
+      }
+    },
+    grantConsent: (input: Parameters<ConsentLedger["grant"]>[0]) => ledger.grant(input),
+    listGrants: (sessionID?: string) => ledger.list(sessionID),
   };
 }
 
@@ -180,10 +196,10 @@ export const serverPlugin: Plugin = async (input) => {
         disabledAgents = [...(suite.disabledAgents ?? [])];
         suiteConfigLoaded = true;
         applyRuntimeDisabledAgents(config, disabledAgents);
-        applyRuntimeBaseOverrides(config, suite.baseOverrides ?? {});
+         applyRuntimeBuiltInOverrides(config, suite.builtInOverrides ?? {});
         applyRuntimeTaskPermission(config, disabledAgents);
         applyRuntimeModelAssignments(config, suite.modelAssignments, suite.variantAssignments);
-      } catch { applyRuntimeTaskPermission(config, disabledAgents); /* TUI reports malformed suite config. */ }
+       } catch { suiteConfigLoaded = false; applyRuntimeTaskPermission(config, disabledAgents); /* TUI reports malformed suite config. */ }
       registeredAgents.clear();
       for (const agentID of configuredAgents) registeredAgents.add(agentID);
     },
