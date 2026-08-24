@@ -6,7 +6,7 @@ import type { AgentCatalogRow } from "../core/types.ts";
 import type { AppScreen } from "./agent-suite-nav.ts";
 import { createVisualTokens } from "./visual-tokens.ts";
 
-export type VisualScreenKind = "catalog" | "info" | "provider" | "model" | "effort" | "error";
+export type VisualScreenKind = "catalog" | "info" | "provider" | "model" | "effort" | "session-grants" | "error";
 
 export interface AgentInfoSection {
   title: string;
@@ -20,6 +20,7 @@ export function screenKeyHints(kind: VisualScreenKind): string {
     case "provider": return "↑↓ navega · Enter selecciona · Esc volver";
     case "model":
     case "effort": return "↑↓ navega · Enter selecciona · Esc volver";
+    case "session-grants": return "↑↓ navega · Enter revoca permiso · Esc volver";
     case "error": return "Enter reintenta · Esc cierra";
   }
 }

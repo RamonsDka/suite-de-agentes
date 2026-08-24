@@ -95,7 +95,7 @@ describe("namespace persistence", () => {
     expect(loadSuiteConfig(path).variantAssignments).toEqual({ "agent-especialit-github": "medium" });
   });
 
-  it("round-trips optional base overrides and disabled agents while preserving v1", () => {
+  it("normalizes legacy base overrides to built-in overrides on atomic save while preserving v1", () => {
     const path = suitePath();
     const value = {
       ...minimal,
@@ -105,7 +105,12 @@ describe("namespace persistence", () => {
 
     saveSuiteConfig(path, value);
 
-    expect(loadSuiteConfig(path)).toEqual(value);
-    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual(value);
+    const normalized = {
+      ...minimal,
+      builtInOverrides: value.baseOverrides,
+      disabledAgents: value.disabledAgents,
+    };
+    expect(loadSuiteConfig(path)).toEqual(normalized);
+    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual(normalized);
   });
 });
