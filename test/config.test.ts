@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseSuiteConfig, patchCustomAgent, setAgentModelAssignment, validateAgentId, validateModelId, validateSkillId, validateVariantId } from "../src/core/config.ts";
+import { restoreBuiltInBaseline } from "../src/core/built-in-agents.ts";
 
 const customAgent = {
   id: "local-helper",
@@ -210,7 +211,7 @@ describe("suite config", () => {
       customAgents: { "local-helper": customAgent },
       modelAssignments: { general: "openai/assigned" },
       variantAssignments: { general: "high" },
-      baseOverrides: {
+      builtInOverrides: {
         general: { description: "A safer general agent", skills: ["testing"], operations: "Use the requested tools." },
       },
       disabledAgents: ["general", "general"],
@@ -219,7 +220,7 @@ describe("suite config", () => {
       customAgents: { "local-helper": customAgent },
       modelAssignments: { general: "openai/assigned" },
       variantAssignments: { general: "high" },
-      baseOverrides: {
+      builtInOverrides: {
         general: { description: "A safer general agent", skills: ["testing"], operations: "Use the requested tools." },
       },
       disabledAgents: ["general"],
@@ -242,5 +243,53 @@ describe("suite config", () => {
       customAgents: {},
       baseOverrides: { general: { skills: ["bad value"] } },
     })).toThrow(/skill|habilidad|invalid/i);
+  });
+
+  it("migrates legacy base overrides to validated built-in overrides without losing custom settings", () => {
+    const config = parseSuiteConfig({
+      version: 1,
+      customAgents: { "local-helper": customAgent },
+      modelAssignments: { "local-helper": "openai/assigned" },
+      variantAssignments: {},
+      baseOverrides: {
+        build: { description: "Compilador personalizado", skills: ["testing"], operations: "Compila con cuidado." },
+      },
+      disabledAgents: ["build"],
+      advancedOverrides: { allowInternalDisable: true },
+    });
+
+    expect(config).toMatchObject({
+      customAgents: { "local-helper": customAgent },
+      modelAssignments: { "local-helper": "openai/assigned" },
+      builtInOverrides: {
+        build: { description: "Compilador personalizado", skills: ["testing"], operations: "Compila con cuidado." },
+      },
+      disabledAgents: ["build"],
+      advancedOverrides: { allowInternalDisable: true },
+    });
+    expect(config).not.toHaveProperty("baseOverrides");
+  });
+
+  it("accepts valid built-in settings but rejects unknown or malformed built-in configuration before persistence", () => {
+    const valid = parseSuiteConfig({
+      version: 1,
+      customAgents: {},
+      builtInOverrides: { plan: { model: "openai/gpt-5.6-luna", effort: "high", skills: ["planning"] } },
+      disabledAgents: ["plan"],
+      advancedOverrides: { allowInternalDisable: false },
+    });
+
+    expect(valid.builtInOverrides?.plan).toEqual({ model: "openai/gpt-5.6-luna", effort: "high", skills: ["planning"] });
+    expect(() => parseSuiteConfig({ version: 1, customAgents: {}, builtInOverrides: { "invalid-agent": { effort: "high" } } })).toThrow(/built-in|integrado|override/i);
+    expect(() => parseSuiteConfig({ version: 1, customAgents: {}, disabledAgents: ["invalid-agent"] })).toThrow(/disabled|deshabilitado|unknown/i);
+    expect(() => parseSuiteConfig({ version: 1, customAgents: {}, advancedOverrides: { allowInternalDisable: "yes" } })).toThrow(/advanced|avanzad/i);
+  });
+
+  it("restores only the selected built-in override and preserves every other override", () => {
+    expect(restoreBuiltInBaseline("explore", {
+      explore: { model: "openai/custom", operations: "Custom operation" },
+      build: { effort: "high" },
+    })).toEqual({ build: { effort: "high" } });
+    expect(() => restoreBuiltInBaseline("invalid-agent")).toThrow(/built-in|integrado|unknown/i);
   });
 });

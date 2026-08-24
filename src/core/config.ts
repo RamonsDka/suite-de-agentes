@@ -1,4 +1,5 @@
-import type { BaseAgentOverride, CustomAgent, SuiteConfig } from "./types.ts";
+import type { BaseAgentOverride, BuiltInOverride, CustomAgent, SuiteConfig } from "./types.ts";
+import { isCanonicalBuiltInAgent } from "./built-in-agents.ts";
 import { SUITE_DE_AGENTES_SEED } from "./suites.ts";
 
 const ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
@@ -112,7 +113,7 @@ export function parseSuiteConfig(value: unknown): SuiteConfig {
   const root = safeRecord(value, "Suite config");
   if (root.version !== 1) throw new Error("Invalid suite config version");
   for (const key of Object.keys(root)) {
-    if (["version", "customAgents", "modelAssignments", "variantAssignments", "activeSuite", "suites", "baseOverrides", "disabledAgents", "coordinator"].includes(key)) continue;
+    if (["version", "customAgents", "modelAssignments", "variantAssignments", "activeSuite", "suites", "baseOverrides", "builtInOverrides", "disabledAgents", "advancedOverrides", "coordinator"].includes(key)) continue;
     if (/profile|suite/i.test(key)) throw new Error(`La configuración de suites/perfiles no es compatible: ${key}`);
     throw new Error(`Unknown suite config field: ${key}`);
   }
@@ -158,39 +159,61 @@ export function parseSuiteConfig(value: unknown): SuiteConfig {
     validateAgentId(agentID);
     try { variantAssignments[agentID] = validateVariantId(rawVariant as string); } catch { throw new Error(`Invalid variant assignment for ${agentID}`); }
   }
-  const hasBaseOverrides = root.baseOverrides !== undefined;
-  const baseOverrides: NonNullable<SuiteConfig["baseOverrides"]> = {};
-  if (root.baseOverrides !== undefined) {
-    const overridesRaw = safeRecord(root.baseOverrides, "baseOverrides");
+  function parseBuiltInOverrides(value: unknown, label: string): Record<string, BuiltInOverride> {
+    const overridesRaw = safeRecord(value, label);
+    const overrides: Record<string, BuiltInOverride> = {};
     for (const [agentID, raw] of Object.entries(overridesRaw)) {
       validateAgentId(agentID);
-      if (!seedIDs.has(agentID)) throw new Error(`Base override must target a seed agent: ${agentID}`);
-      const override = safeRecord(raw, `base override ${agentID}`);
-      const parsed: BaseAgentOverride = {};
+      if (!isCanonicalBuiltInAgent(agentID)) throw new Error(`Built-in override must target a canonical built-in agent: ${agentID}`);
+      const override = safeRecord(raw, `${label} ${agentID}`);
+      const parsed: BuiltInOverride = {};
       if (override.description !== undefined) {
-        if (typeof override.description !== "string") throw new Error(`Invalid base override ${agentID}`);
+        if (typeof override.description !== "string") throw new Error(`Invalid built-in override ${agentID}`);
         parsed.description = override.description;
       }
       if (override.skills !== undefined) {
-        if (!Array.isArray(override.skills)) throw new Error(`Invalid skills for base override ${agentID}`);
+        if (!Array.isArray(override.skills)) throw new Error(`Invalid skills for built-in override ${agentID}`);
         parsed.skills = override.skills.map((skill) => validateSkillId(skill as string));
       }
       if (override.operations !== undefined) {
-        if (typeof override.operations !== "string") throw new Error(`Invalid operations for base override ${agentID}`);
+        if (typeof override.operations !== "string") throw new Error(`Invalid operations for built-in override ${agentID}`);
         parsed.operations = override.operations;
       }
-      baseOverrides[agentID] = parsed;
+      if (override.model !== undefined) {
+        try { parsed.model = validateModelId(override.model as string); } catch { throw new Error(`Invalid model for built-in override ${agentID}`); }
+      }
+      if (override.effort !== undefined) {
+        if (typeof override.effort !== "string" || !override.effort.trim()) throw new Error(`Invalid effort for built-in override ${agentID}`);
+        parsed.effort = override.effort;
+      }
+      overrides[agentID] = parsed;
     }
+    return overrides;
   }
+  const legacyOverrides = root.baseOverrides === undefined ? {} : parseBuiltInOverrides(root.baseOverrides, "baseOverrides");
+  const builtInOverrides = root.builtInOverrides === undefined ? legacyOverrides : {
+    ...legacyOverrides,
+    ...parseBuiltInOverrides(root.builtInOverrides, "builtInOverrides"),
+  };
   const hasDisabledAgents = root.disabledAgents !== undefined;
   const disabledAgents = root.disabledAgents === undefined ? [] : [...new Set(Array.isArray(root.disabledAgents) ? root.disabledAgents.map((id) => {
     if (typeof id !== "string") throw new Error("Invalid disabled agent id");
     return validateAgentId(id);
   }) : (() => { throw new Error("disabledAgents must be an array"); })())];
-  for (const id of disabledAgents) if (!seedIDs.has(id) && !Object.prototype.hasOwnProperty.call(customAgents, id)) throw new Error(`Unknown disabled agent: ${id}`);
+  for (const id of disabledAgents) if (!isCanonicalBuiltInAgent(id) && !Object.prototype.hasOwnProperty.call(customAgents, id)) throw new Error(`Unknown disabled agent: ${id}`);
+  let advancedOverrides: SuiteConfig["advancedOverrides"];
+  if (root.advancedOverrides !== undefined) {
+    const rawAdvancedOverrides = safeRecord(root.advancedOverrides, "advancedOverrides");
+    for (const key of Object.keys(rawAdvancedOverrides)) if (key !== "allowInternalDisable") throw new Error(`Unknown advanced override: ${key}`);
+    if (rawAdvancedOverrides.allowInternalDisable !== undefined && typeof rawAdvancedOverrides.allowInternalDisable !== "boolean") {
+      throw new Error("Invalid advanced override allowInternalDisable");
+    }
+    advancedOverrides = rawAdvancedOverrides.allowInternalDisable === undefined ? {} : { allowInternalDisable: rawAdvancedOverrides.allowInternalDisable };
+  }
   const result: SuiteConfig = { version: 1, customAgents, modelAssignments, variantAssignments };
-  if (hasBaseOverrides) result.baseOverrides = baseOverrides;
+  if (root.baseOverrides !== undefined || root.builtInOverrides !== undefined) result.builtInOverrides = builtInOverrides;
   if (hasDisabledAgents) result.disabledAgents = disabledAgents;
+  if (advancedOverrides !== undefined) result.advancedOverrides = advancedOverrides;
   if (root.coordinator !== undefined) result.coordinator = root.coordinator;
   return result;
 }

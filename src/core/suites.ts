@@ -1,6 +1,14 @@
 import type { AgentCatalogRow, BaseAgentOverride, CustomAgent } from "./types.ts";
+import { restoreBuiltInBaseline } from "./built-in-agents.ts";
 
 export const SUITE_DE_AGENTES_SEED = ["general", "agent-especialit-github"] as const;
+
+export function restoreBuiltInAgentOverride(
+  id: string,
+  overrides: Record<string, BaseAgentOverride> = {},
+): Record<string, BaseAgentOverride> {
+  return restoreBuiltInBaseline(id, overrides);
+}
 
 export function buildSuiteDeAgentesCatalog(
   runtime: Record<string, { model?: string; variant?: string; description?: string }>,
