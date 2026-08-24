@@ -7,6 +7,7 @@ import type { AgentCatalogRow } from "../../core/types.ts";
 import { filterCatalogRows, MAX_VISIBLE_ROWS, pageCount, pageRows } from "../agent-suite-vm.ts";
 import { Divider, searchInputPresentation, SelectableRow } from "../visual-primitives.tsx";
 import { createVisualTokens, formatCatalogName } from "../visual-tokens.ts";
+import { getBuiltInDefinition } from "../../core/built-in-agents.ts";
 
 export interface CatalogProps {
   theme: TuiTheme;
@@ -63,7 +64,7 @@ function catalogFocusDelta(key: Pick<KeyEvent, "name">): -1 | 1 | undefined {
 }
 
 export function catalogRowLabel(row: Pick<AgentCatalogRow, "id"> & { disabled?: boolean }, maxLength?: number): string {
-  const name = formatCatalogName(row.id, maxLength);
+  const name = formatCatalogName(getBuiltInDefinition(row.id)?.displayName ?? row.id, maxLength);
   return row.disabled ? `${name} · DESACTIVADO` : name;
 }
 

@@ -7,6 +7,7 @@ import { globalAgentPath, materializeGlobalAgent } from "../src/core/agents.ts";
 import { loadSuiteConfig, saveSuiteConfig } from "../src/core/persistence.ts";
 import type { CreateDraft } from "../src/tui/agent-suite-create.ts";
 import type { AgentCatalogRow } from "../src/core/types.ts";
+import { ConsentLedger } from "../src/core/grants.ts";
 
 const row: AgentCatalogRow = { id: "custom", membership: "custom", enabled: false, skills: ["testing"], consent: "explicit-current-turn" };
 const draft: CreateDraft = { id: "new-agent", description: "New agent", skills: ["testing"], operations: "Review", model: "openai/gpt-5", effort: "high" };
@@ -25,14 +26,14 @@ describe("Agent Suite controller adapter", () => {
 
   it("supports explicit operation method names for every mutation", () => {
     const controller = createAgentSuiteController();
-    expect(Object.keys(controller)).toEqual(["snapshot", "refresh", "createAgent", "deleteAgent", "deactivateAgent", "reactivateAgent", "materialize", "setModel", "setEffort", "setModelAndEffort", "setSkills", "setOperations", "patchAgent", "operations"]);
+    expect(Object.keys(controller)).toEqual(["snapshot", "refresh", "createAgent", "deleteAgent", "deactivateAgent", "reactivateAgent", "restoreBuiltIn", "activeGrants", "revokeGrant", "materialize", "setModel", "setEffort", "setModelAndEffort", "setSkills", "setOperations", "patchAgent", "operations"]);
   });
 
   it("builds the initial snapshot from persisted and runtime agents", () => {
     const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
     writeFileSync(path, JSON.stringify({ version: 1, customAgents: { "smoke-custom": { id: "smoke-custom", description: "Smoke custom", model: "openai/gpt-5", prompt: "Smoke", permissions: { read: "allow" }, skills: [] } }, modelAssignments: {}, variantAssignments: {} }));
     const controller = createAgentSuiteController([], "1.0.1", { path, runtime: { general: { model: "openai/gpt-5" }, "smoke-custom": { model: "openai/gpt-5" } } });
-    expect(controller.snapshot().rows.map(({ id }) => id)).toEqual(["agent-especialit-github", "general", "smoke-custom"]);
+    expect(controller.snapshot().rows.map(({ id }) => id)).toEqual(["agent-especialit-github", "build", "compaction", "explore", "general", "plan", "smoke-custom", "summary", "title"]);
   });
 
   it("refreshes the catalog after an external orchestrator changes the suite config", () => {
@@ -250,6 +251,34 @@ describe("Agent Suite controller adapter", () => {
 
     await expect(controller.deleteAgent("general")).rejects.toThrow(/base|seed|delete|eliminar/i);
     expect(controller.snapshot().rows.some((item) => item.id === "general")).toBe(true);
+  });
+
+  it("restores only a built-in baseline and requires an advanced override before disabling an internal agent", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
+    saveSuiteConfig(path, {
+      version: 1,
+      customAgents: {},
+      modelAssignments: { explore: "anthropic/sonnet", build: "openai/assigned" },
+      variantAssignments: { explore: "high" },
+      builtInOverrides: { explore: { description: "Edited", skills: ["testing"], operations: "Edited operations" } },
+    });
+    const controller = createAgentSuiteController([], "1.0.1", { path, runtime: { build: { model: "openai/runtime" }, explore: { model: "openai/runtime" }, compaction: { model: "openai/runtime" } } });
+
+    await controller.restoreBuiltIn!("explore");
+    expect(loadSuiteConfig(path)).toMatchObject({ builtInOverrides: {}, modelAssignments: { build: "openai/assigned" } });
+    expect(loadSuiteConfig(path).modelAssignments).not.toHaveProperty("explore");
+    await expect(controller.deactivateAgent!("compaction")).rejects.toThrow(/advanced|anulaci[oó]n/i);
+    expect(controller.snapshot().rows.find((item) => item.id === "compaction")).toMatchObject({ enabled: true });
+  });
+
+  it("lists and immediately revokes the active grants injected for the current TUI session", async () => {
+    const ledger = new ConsentLedger();
+    const grant = ledger.grant({ sessionID: "session-1", requester: "build", target: "explore", purpose: "codebase search", operation: "task" });
+    const controller = createAgentSuiteController([], "1.0.1", { runtime: { general: { model: "openai/gpt-5" } }, ledger, sessionID: "session-1" });
+
+    expect(controller.activeGrants?.()).toEqual([expect.objectContaining({ id: grant.id, requester: "build", target: "explore", duration: "current-session" })]);
+    await controller.revokeGrant!(grant.id);
+    expect(controller.activeGrants?.()).toEqual([]);
   });
 
   it("deletes a custom registry entry and its materialized file", async () => {
