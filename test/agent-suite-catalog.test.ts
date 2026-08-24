@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { filterCatalogRows, MAX_VISIBLE_ROWS, pageCount, pageRows } from "../src/tui/agent-suite-vm.ts";
 import { CATALOG_EMPTY_MESSAGE, catalogRowLabel, dispatchCatalogWheel, captureCatalogRow, catalogFocusBounds, catalogMouseActivation } from "../src/tui/screens/catalog.tsx";
+import { agentInfoActions, infoActionKeys } from "../src/tui/screens/agent-info.tsx";
 import { eventForKey, normalizeCatalogState } from "../src/tui/agent-suite-app.tsx";
+import { sessionGrantLabel } from "../src/tui/screens/session-grants.tsx";
 import { reduceNav } from "../src/tui/agent-suite-nav.ts";
 import type { KeyEvent } from "@opencode-ai/plugin/tui";
 
@@ -96,6 +98,26 @@ describe("Agent Suite catalog", () => {
     expect(eventForKey({ name: "f8" } as KeyEvent, info)).toBeUndefined();
   });
 
+  it("maps built-in detail actions to restore and protected disable without adding authoring flows", () => {
+    const restore = { stack: [{ kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false }, { kind: "info", agentId: "explore", focus: 1 }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
+    const disable = { ...restore, stack: [...restore.stack.slice(0, -1), { kind: "info", agentId: "compaction", focus: 2 }] } as import("../src/tui/agent-suite-nav.ts").NavState;
+
+    expect(eventForKey({ name: "return" } as KeyEvent, restore, 0, undefined, { focusedAgent: { id: "explore", membership: "seed" } })).toEqual({ type: "RESTORE_BUILT_IN", agentId: "explore" });
+    expect(eventForKey({ name: "return" } as KeyEvent, disable, 0, undefined, { focusedAgent: { id: "compaction", membership: "seed" } })).toEqual({ type: "DEACTIVATE_AGENT", agentId: "compaction" });
+  });
+
+  it("presents built-ins with curated display names and type-specific actions", () => {
+    const builtIn = { ...rows[0], id: "plan", membership: "seed" as const };
+    const internal = { ...rows[0], id: "compaction", membership: "seed" as const };
+    const custom = { ...rows[0], id: "writer", membership: "custom" as const };
+
+    expect(catalogRowLabel(builtIn)).toBe("Plan");
+    expect(infoActionKeys(builtIn)).toEqual(["Cambiar modelo y esfuerzo", "Restaurar valores base", "Desactivar", "Volver"]);
+    expect(infoActionKeys(internal)).toEqual(["Cambiar modelo y esfuerzo", "Restaurar valores base", "Desactivar (requiere anulación avanzada)", "Volver"]);
+    expect(infoActionKeys(custom)).toEqual(["Cambiar modelo y esfuerzo", "Volver"]);
+    expect(agentInfoActions(builtIn)[1]).toBe("Restaurar valores base");
+  });
+
   it("leaves submit to the focused input and lets Escape/arrows reclaim catalog ownership", () => {
     const searching = { stack: [{ kind: "catalog", page: 0, focus: 0, query: "son", searchFocused: true }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
     expect(eventForKey({ name: "return" } as KeyEvent, searching, rows.length, "agent-0")).toBeUndefined();
@@ -109,6 +131,13 @@ describe("Agent Suite catalog", () => {
     const catalog = { stack: [{ kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
     expect(eventForKey({ name: "/", sequence: "/" } as KeyEvent, catalog, rows.length)).toEqual({ type: "FOCUS_CATALOG_SEARCH" });
     expect(eventForKey({ name: "kpenter" } as KeyEvent, catalog, rows.length, "agent-0")).toEqual({ type: "ACTIVATE_AGENT", agentId: "agent-0" });
+  });
+
+  it("opens a session-grants panel from the catalog and formats grants for immediate revocation", () => {
+    const catalog = { stack: [{ kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
+
+    expect(eventForKey({ name: "g", sequence: "g" } as KeyEvent, catalog, rows.length)).toEqual({ type: "OPEN_SESSION_GRANTS" });
+    expect(sessionGrantLabel({ id: "grant-1", sessionID: "session-1", requester: "build", target: "explore", purpose: "codebase search", operation: "task", duration: "current-session" })).toBe("Build → Explore · codebase search · sesión actual");
   });
 
   it("clamps a stale page and focus after the catalog shrinks", () => {

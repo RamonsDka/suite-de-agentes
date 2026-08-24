@@ -9,4 +9,5 @@ export * from "./policy.ts";
 export * from "./persistence.ts";
 export * from "./agent-markdown.ts";
 export * from "./agents.ts";
+export * from "./built-in-agents.ts";
 export * from "./suites.ts";

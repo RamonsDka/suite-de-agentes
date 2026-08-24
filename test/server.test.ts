@@ -7,12 +7,12 @@ import { defaultSuitePath, saveSuiteConfig } from "../src/core/persistence.ts";
 import defaultPlugin, { createAgentSuiteServer, serverPlugin } from "../src/server/index.ts";
 
 describe("server adapter", () => {
-  it("gates a non-SDD task using the current chat message only", async () => {
+  it("gates a non-SDD task with an active session grant", async () => {
     const hooks = createAgentSuiteServer({ knownAgents: () => ["github-specialist"] });
     await hooks["chat.message"]({ sessionID: "s", agent: "gentle-orchestrator", messageID: "m1" }, { message: { id: "m1", agent: "gentle-orchestrator" } as never, parts: [{ type: "text", text: "usa también agente: github-specialist" }] as never });
     await expect(hooks["tool.execute.before"]({ tool: "task", sessionID: "s", callID: "c1" }, { args: { subagent_type: "github-specialist" } })).resolves.toBeUndefined();
     await hooks["chat.message"]({ sessionID: "s", agent: "gentle-orchestrator", messageID: "m2" }, { message: { id: "m2", agent: "gentle-orchestrator" } as never, parts: [] as never });
-    await expect(hooks["tool.execute.before"]({ tool: "task", sessionID: "s", callID: "c2" }, { args: { subagent_type: "github-specialist" } })).rejects.toThrow("current message");
+    await expect(hooks["tool.execute.before"]({ tool: "task", sessionID: "s", callID: "c2" }, { args: { subagent_type: "github-specialist" } })).resolves.toBeUndefined();
   });
 
   it("denies and then allows agent-especialit-github only with exact current-turn consent", async () => {
@@ -36,6 +36,7 @@ describe("server adapter", () => {
       args: { subagent_type: "agent-especialit-github" },
     })).resolves.toBeUndefined();
 
+    await hooks.event?.({ event: { type: "session.deleted", properties: { info: { id: "github" } } } } as never);
     await hooks["chat.message"]?.({ sessionID: "github", agent: "gentle-orchestrator", messageID: "m3" }, {
       message: { id: "m3", agent: "gentle-orchestrator" } as never,
       parts: [] as never,
@@ -69,7 +70,7 @@ describe("server adapter", () => {
     await hooks["chat.message"]?.({ sessionID: "s", messageID: "m1" }, { message: { id: "m1", agent: "gentle-orchestrator" } as never, parts: [{ type: "text", text: "usa también agente: general" }] as never });
     await expect(hooks["tool.execute.before"]?.({ tool: "task", sessionID: "s", callID: "c1" }, { args: { subagent_type: "general" } })).resolves.toBeUndefined();
     await hooks["chat.message"]?.({ sessionID: "s", messageID: "m2" }, { message: { id: "m2", agent: "gentle-orchestrator" } as never, parts: [{ type: "text", text: "usa también agente: unknown" }] as never });
-    await expect(hooks["tool.execute.before"]?.({ tool: "task", sessionID: "s", callID: "c2" }, { args: { subagent_type: "unknown" } })).rejects.toThrow("Blocked agent");
+    await expect(hooks["tool.execute.before"]?.({ tool: "task", sessionID: "s", callID: "c2" }, { args: { subagent_type: "unknown" } })).rejects.toThrow("target is unknown");
   });
 
   it("allows every configured internal agent without a current-turn ledger grant", async () => {
@@ -153,7 +154,7 @@ describe("server adapter", () => {
     const input = { client: { session: { messages: async () => ({ data: [{ info: { role: "user", agent: "general" } }] }) } } };
     const hooks = await serverPlugin(input as never);
     await hooks.config?.({ agent: { general: {} } } as never);
-    await hooks["chat.message"]?.({ sessionID: "s", messageID: "m1" }, { message: { id: "m1" } as never, parts: [] as never });
+    await hooks["chat.message"]?.({ sessionID: "s", messageID: "m1" }, { message: { id: "m1" } as never, parts: [{ type: "agent", name: "general" }] as never });
     await expect(hooks["tool.execute.before"]?.({ tool: "task", sessionID: "s", callID: "c1" }, { args: { subagent_type: "general" } })).resolves.toBeUndefined();
   });
 
@@ -313,5 +314,21 @@ describe("server adapter", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it("expires session grants and exposes list/revoke command surfaces", async () => {
+    const hooks = createAgentSuiteServer({ knownAgents: () => ["general", "explore"] });
+    await hooks["chat.message"]({ sessionID: "s", agent: "general", messageID: "m1" }, { message: { id: "m1", agent: "general" } as never, parts: [] as never });
+    const grant = hooks.grantConsent({ sessionID: "s", requester: "general", target: "explore", purpose: "search", operation: "task" });
+    expect(hooks.listGrants("s")).toEqual([expect.objectContaining({ id: grant.id, requester: "general", target: "explore", purpose: "search", operation: "task", duration: "current-session" })]);
+    await expect(hooks["tool.execute.before"]({ tool: "task", sessionID: "s", callID: "allowed" }, { args: { subagent_type: "explore" } })).resolves.toBeUndefined();
+    await hooks.event({ event: { type: "session.deleted", properties: { info: { id: "s" } } } } as never);
+    await expect(hooks["tool.execute.before"]({ tool: "task", sessionID: "s", callID: "expired" }, { args: { subagent_type: "explore" } })).rejects.toThrow("current turn");
+    const output = { parts: [] as never[] };
+    await hooks["command.execute.before"]({ command: "agent-suite-grants", sessionID: "s", arguments: "" }, output as never);
+    expect(output.parts[0]).toMatchObject({ type: "text", text: "No active session grants." });
+    hooks.grantConsent({ sessionID: "s", requester: "general", target: "explore", purpose: "search", operation: "task" });
+    await hooks["command.execute.before"]({ command: "agent-suite-revoke", sessionID: "s", arguments: "explore" }, { parts: [] } as never);
+    expect(hooks.listGrants("s")).toEqual([]);
   });
 });

@@ -18,13 +18,49 @@ export interface BaseAgentOverride {
   operations?: string;
 }
 
+export type BuiltInClassification = "public" | "internal";
+export type BuiltInCuration = "curated" | "pending-curation";
+
+export interface BuiltInBaseline {
+  description: string;
+  model: string;
+  effort: string;
+  operations: string;
+  skills: readonly string[];
+}
+
+export interface BuiltInDefinition {
+  id: string;
+  displayName: string;
+  classification: BuiltInClassification;
+  curation: BuiltInCuration;
+  baseline: BuiltInBaseline;
+  warnings?: readonly string[];
+}
+
+export interface BuiltInOverride extends BaseAgentOverride {
+  model?: string;
+  effort?: string;
+}
+
+export interface AdvancedOverrides {
+  allowInternalDisable?: boolean;
+}
+
+export interface BuiltInRuntimeAgent {
+  model?: string;
+  variant?: string;
+  description?: string;
+}
+
 export interface SuiteConfig {
   version: 1;
   customAgents: Record<string, CustomAgent>;
   modelAssignments: Record<string, string>;
   variantAssignments: Record<string, string>;
-  baseOverrides?: Record<string, BaseAgentOverride>;
+  builtInOverrides?: Record<string, BuiltInOverride>;
   disabledAgents?: string[];
+  advancedOverrides?: AdvancedOverrides;
   /** Preserved only while reading and writing legacy configuration files. */
   coordinator?: unknown;
 }
@@ -43,5 +79,21 @@ export interface AgentCatalogRow {
 }
 
 export interface RuntimeMessage { sessionID: string; messageID: string; role?: string; parts?: unknown[]; text?: string; }
-export interface TaskGateInput { sessionAgent?: string; target: string; sessionID: string; messageID: string; ledger?: { has(sessionID: string, messageID: string, target: string): boolean }; }
+export interface SessionGrant {
+  id: string;
+  sessionID: string;
+  requester: string;
+  target: string;
+  purpose: string;
+  operation: string;
+  duration: "current-session";
+}
+export interface TaskGateInput {
+  sessionAgent?: string;
+  target: string;
+  sessionID: string;
+  messageID: string;
+  knownAgents?: readonly string[];
+  ledger?: { has(sessionID: string, requester: string, target: string): boolean };
+}
 export interface TaskGateDecision { allowed: boolean; reason?: string; }

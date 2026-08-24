@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ConsentLedger,
   decideTaskGate,
   INTERNAL_AGENT_ALLOWLIST,
   isAuthorizedInternalAgent,
@@ -34,18 +35,32 @@ describe("task policy", () => {
     }
   });
 
-  it("requires an exact current-turn grant for user-facing and lookalike agents", () => {
+  it("fails closed for ungranted, unknown, and lookalike automatic dispatches", () => {
     for (const target of ["general", "explore", "agent-especialit-github", "custom-agent", "sdd-evil"]) {
       expect(isAuthorizedInternalAgent(target), target).toBe(false);
-      expect(decideTaskGate({ sessionAgent: "gentle-orchestrator", target, sessionID: "s", messageID: "m" })).toMatchObject({
+      expect(decideTaskGate({ sessionAgent: "general", target, sessionID: "s", messageID: "m", knownAgents: ["general", "explore"] })).toMatchObject({
         allowed: false,
       });
     }
   });
 
-  it("keeps non-orchestrator sessions outside this task policy", () => {
-    expect(decideTaskGate({ sessionAgent: "gentle-orchestrator", target: "general", sessionID: "s", messageID: "m" }).allowed).toBe(false);
-    expect(decideTaskGate({ sessionAgent: "general", target: "general", sessionID: "s", messageID: "m" }).allowed).toBe(true);
+  it("allows only the requester-target pair recorded in an active session grant", () => {
+    const ledger = new ConsentLedger();
+    ledger.grant({ sessionID: "s", requester: "general", target: "explore", purpose: "search", operation: "task" });
+    expect(decideTaskGate({ sessionAgent: "general", target: "explore", sessionID: "s", messageID: "m", ledger, knownAgents: ["general", "explore"] }).allowed).toBe(true);
+    expect(decideTaskGate({ sessionAgent: "general", target: "general", sessionID: "s", messageID: "m", ledger, knownAgents: ["general", "explore"] }).allowed).toBe(false);
+    expect(decideTaskGate({ sessionAgent: "unknown", target: "explore", sessionID: "s", messageID: "m", ledger, knownAgents: ["general", "explore"] }).allowed).toBe(false);
+  });
+
+  it("lists visible grant details and denies grants after revocation or session expiry", () => {
+    const ledger = new ConsentLedger();
+    const grant = ledger.grant({ sessionID: "s", requester: "general", target: "explore", purpose: "codebase search", operation: "task" });
+    expect(ledger.list("s")).toEqual([expect.objectContaining({ requester: "general", target: "explore", purpose: "codebase search", operation: "task", duration: "current-session" })]);
+    ledger.revoke(grant.id);
+    expect(decideTaskGate({ sessionAgent: "general", target: "explore", sessionID: "s", messageID: "m", ledger, knownAgents: ["general", "explore"] }).allowed).toBe(false);
+    ledger.grant({ sessionID: "s", requester: "general", target: "explore", purpose: "codebase search", operation: "task" });
+    ledger.clearSession("s");
+    expect(ledger.list("s")).toEqual([]);
   });
 
   it("contains the complete exact SDD allowlist", () => {

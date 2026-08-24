@@ -1,4 +1,5 @@
-import type { RuntimeMessage } from "./types.ts";
+import { randomUUID } from "node:crypto";
+import type { RuntimeMessage, SessionGrant } from "./types.ts";
 
 const CANONICAL = /^usa también agente: ([a-z][a-z0-9]*(?:-[a-z0-9]+)*)$/u;
 
@@ -30,18 +31,40 @@ function nativeAgentNames(message: RuntimeMessage, knownAgents: string[]): strin
 }
 
 export class ConsentLedger {
-  private readonly grants = new Map<string, Map<string, Set<string>>>();
-  grant(sessionID: string, messageID: string, agents: string[]): void {
-    let session = this.grants.get(sessionID);
-    if (!session) { session = new Map(); this.grants.set(sessionID, session); }
-    session.set(messageID, new Set(agents));
+  private readonly grants = new Map<string, Map<string, SessionGrant>>();
+  grant(input: Omit<SessionGrant, "id" | "duration">): SessionGrant {
+    const grant: SessionGrant = { ...input, id: randomUUID(), duration: "current-session" };
+    let session = this.grants.get(grant.sessionID);
+    if (!session) { session = new Map(); this.grants.set(grant.sessionID, session); }
+    session.set(grant.id, grant);
+    return grant;
   }
-  has(sessionID: string, messageID: string, agent: string): boolean { return this.grants.get(sessionID)?.get(messageID)?.has(agent) === true; }
+  has(sessionID: string, requester: string, target: string): boolean {
+    return [...(this.grants.get(sessionID)?.values() ?? [])].some((grant) => grant.requester === requester && grant.target === target);
+  }
+  list(sessionID?: string): SessionGrant[] {
+    const sessions = sessionID === undefined ? this.grants.values() : [this.grants.get(sessionID)];
+    return [...sessions].flatMap((session) => session ? [...session.values()] : []);
+  }
+  revoke(id: string): boolean {
+    for (const [sessionID, session] of this.grants) {
+      if (!session.delete(id)) continue;
+      if (session.size === 0) this.grants.delete(sessionID);
+      return true;
+    }
+    return false;
+  }
+  revokeTarget(sessionID: string, target: string): boolean {
+    const grant = this.list(sessionID).find((item) => item.target === target);
+    return grant ? this.revoke(grant.id) : false;
+  }
   clearSession(sessionID: string): void { this.grants.delete(sessionID); }
 }
 
-export function registerMessageGrant(ledger: ConsentLedger, message: RuntimeMessage, knownAgents: string[]): string[] {
+export function registerMessageGrant(ledger: ConsentLedger, message: RuntimeMessage, knownAgents: string[], requester = ""): string[] {
   const agents = [...new Set([...parseConsent(messageText(message), knownAgents), ...nativeAgentNames(message, knownAgents)])];
-  ledger.grant(message.sessionID, message.messageID, agents);
+  for (const target of agents) {
+    ledger.grant({ sessionID: message.sessionID, requester: requester || message.messageID, target, purpose: "user-confirmed dispatch", operation: "task" });
+  }
   return agents;
 }

@@ -1,4 +1,4 @@
-import type { AgentCatalogRow, CustomAgent, SuiteConfig } from "../core/types.ts";
+import type { AgentCatalogRow, CustomAgent, SessionGrant, SuiteConfig } from "../core/types.ts";
 import { existsSync, mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { buildSuiteDeAgentesCatalog, SUITE_DE_AGENTES_SEED } from "../core/suites.ts";
@@ -6,6 +6,8 @@ import { patchBaseAgent, patchCustomAgent, setAgentModelAssignment, type AgentPa
 import { loadSuiteConfig, saveSuiteConfig } from "../core/persistence.ts";
 import { globalAgentPath, materializeGlobalAgent, renameMaterializedAgentResult } from "../core/agents.ts";
 import type { CreateDraft } from "./agent-suite-create.ts";
+import { isInternalBuiltInAgent, restoreBuiltInBaseline } from "../core/built-in-agents.ts";
+import { ConsentLedger } from "../core/grants.ts";
 
 export interface AgentSuiteController {
   snapshot(): { rows: AgentCatalogRow[]; disabledRows?: AgentCatalogRow[]; version: string };
@@ -14,6 +16,9 @@ export interface AgentSuiteController {
   deleteAgent(id: string): Promise<void>;
   deactivateAgent?(id: string): Promise<void>;
   reactivateAgent?(id: string): Promise<void>;
+  restoreBuiltIn?(id: string): Promise<void>;
+  activeGrants?(): SessionGrant[];
+  revokeGrant?(id: string): Promise<void>;
   materialize(id: string): Promise<void>;
   setModel(id: string, model: string): Promise<void>;
   setEffort(id: string, variant: string): Promise<void>;
@@ -24,12 +29,23 @@ export interface AgentSuiteController {
   operations?(id: string): string | undefined;
 }
 
+export async function applyBuiltInAgentAction(
+  controller: Pick<AgentSuiteController, "restoreBuiltIn" | "deactivateAgent">,
+  action: "restore" | "disable",
+  id: string,
+): Promise<void> {
+  if (action === "restore") return controller.restoreBuiltIn?.(id);
+  return controller.deactivateAgent?.(id);
+}
+
 type ControllerOptions = {
   path?: string;
   runtime?: Record<string, { model?: string; variant?: string; description?: string; prompt?: string; skills?: string[] }>;
   custom?: Record<string, CustomAgent>;
   seed?: readonly string[];
   home?: string;
+  ledger?: ConsentLedger;
+  sessionID?: string;
 };
 
 export function createAgentSuiteController(
@@ -51,8 +67,9 @@ export function createAgentSuiteController(
   }]));
   let config: SuiteConfig = options.path ? loadSuiteConfig(options.path) : { version: 1, customAgents: { ...rowCustomAgents, ...(options.custom ?? {}) }, modelAssignments: {}, variantAssignments: {} };
   const runtime = options.runtime ?? Object.fromEntries(currentRows.map((row) => [row.id, { model: row.model, variant: row.variant, description: row.description, prompt: row.operations, skills: row.skills }]));
+  const ledger = options.ledger;
   const rebuild = () => {
-    const allRows = buildSuiteDeAgentesCatalog(runtime, config.customAgents, seed, config.modelAssignments, config.variantAssignments, config.baseOverrides, config.disabledAgents);
+    const allRows = buildSuiteDeAgentesCatalog(runtime, config.customAgents, seed, config.modelAssignments, config.variantAssignments, config.builtInOverrides, config.disabledAgents);
     currentRows = allRows.filter((row) => row.disabled !== true);
     disabledRows = allRows.filter((row) => row.disabled === true);
   };
@@ -164,12 +181,24 @@ export function createAgentSuiteController(
     },
     deactivateAgent: async (id) => mutation(() => {
       if (!seed.includes(id)) throw new Error(`Only base agents can be deactivated: ${id}`);
+      if (isInternalBuiltInAgent(id) && config.advancedOverrides?.allowInternalDisable !== true) throw new Error(`Advanced override confirmation is required before disabling internal agent: ${id}`);
       config.disabledAgents = [...new Set([...(config.disabledAgents ?? []), id])];
     }),
     reactivateAgent: async (id) => mutation(() => {
       if (!seed.includes(id) && !config.customAgents[id]) throw new Error(`Unknown owned agent: ${id}`);
       config.disabledAgents = (config.disabledAgents ?? []).filter((agentID) => agentID !== id);
     }),
+    restoreBuiltIn: async (id) => mutation(() => {
+      if (!seed.includes(id)) throw new Error(`Only built-in agents can be restored: ${id}`);
+      config = {
+        ...config,
+        builtInOverrides: restoreBuiltInBaseline(id, config.builtInOverrides),
+        modelAssignments: Object.fromEntries(Object.entries(config.modelAssignments).filter(([agentID]) => agentID !== id)),
+        variantAssignments: Object.fromEntries(Object.entries(config.variantAssignments).filter(([agentID]) => agentID !== id)),
+      };
+    }),
+    activeGrants: () => ledger ? ledger.list(options.sessionID) : [],
+    revokeGrant: async (id) => { ledger?.revoke(id); },
     materialize: async (id) => mutation(() => {
       const agent = config.customAgents[id];
       if (!agent) throw new Error(`Unknown custom agent: ${id}`);
@@ -181,6 +210,6 @@ export function createAgentSuiteController(
     setSkills: async (id, skills) => mutation(() => { const agent = config.customAgents[id]; if (!agent) throw new Error(`Unknown custom agent: ${id}`); agent.skills = [...skills]; }),
     setOperations: async (id, prompt) => mutation(() => { const agent = config.customAgents[id]; if (!agent) throw new Error(`Unknown custom agent: ${id}`); agent.prompt = prompt; }),
     patchAgent,
-    operations: (id) => config.customAgents[id]?.prompt ?? config.baseOverrides?.[id]?.operations,
+    operations: (id) => config.customAgents[id]?.prompt ?? config.builtInOverrides?.[id]?.operations,
   };
 }
