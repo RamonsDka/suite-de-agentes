@@ -1,6 +1,7 @@
 import type { JSX } from "@opentui/solid";
 import type { TuiTheme } from "@opencode-ai/plugin/tui";
 import type { AgentCatalogRow } from "../../core/types.ts";
+import { getBuiltInDefinition, isInternalBuiltInAgent } from "../../core/built-in-agents.ts";
 import { agentInfoSections, Divider, FieldRow, SectionPanel, SelectableRow, StatusBadge, type AgentInfoSection, type StatusBadgeProps } from "../visual-primitives.tsx";
 
 export interface AgentInfoProps {
@@ -9,6 +10,8 @@ export interface AgentInfoProps {
   operations?: string;
   focus: number;
   onOpenModelAssignment: () => void;
+  onRestoreBuiltIn?: () => void;
+  onDeactivate?: () => void;
   onBack: () => void;
 }
 
@@ -37,18 +40,23 @@ export function formatAgentInfo(row: AgentCatalogRow, operations?: string): stri
   ];
 }
 
-export function agentInfoActions(): readonly ["Cambiar modelo y esfuerzo", "Volver"] {
+export function agentInfoActions(row?: Pick<AgentCatalogRow, "id" | "membership">): readonly string[] {
+  if (!row) return ["Cambiar modelo y esfuerzo", "Volver"];
+  if (getBuiltInDefinition(row.id)) return ["Cambiar modelo y esfuerzo", "Restaurar valores base", isInternalBuiltInAgent(row.id) ? "Desactivar (requiere anulación avanzada)" : "Desactivar", "Volver"];
   return ["Cambiar modelo y esfuerzo", "Volver"];
 }
 
-export function infoActionKeys(_row?: Pick<AgentCatalogRow, "membership" | "enabled"> & { disabled?: boolean }): string[] {
-  return [...agentInfoActions()];
+export function infoActionKeys(_row?: Pick<AgentCatalogRow, "id" | "membership" | "enabled"> & { disabled?: boolean }): string[] {
+  return [...agentInfoActions(_row)];
 }
 
 export function AgentInfo(props: AgentInfoProps): JSX.Element {
-  const actions = agentInfoActions;
+  const actions = () => agentInfoActions(props.row);
   const action = (index: number) => {
-    if (actions()[index] === "Cambiar modelo y esfuerzo") props.onOpenModelAssignment();
+    const label = actions()[index];
+    if (label === "Cambiar modelo y esfuerzo") props.onOpenModelAssignment();
+    else if (label === "Restaurar valores base") props.onRestoreBuiltIn?.();
+    else if (label?.startsWith("Desactivar")) props.onDeactivate?.();
     else props.onBack();
   };
   return (

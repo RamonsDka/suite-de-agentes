@@ -7,7 +7,8 @@ export type AppScreen =
   | { kind: "info"; agentId: string; focus: number }
   | { kind: "provider"; agentId: string; focus: number }
   | { kind: "model"; agentId: string; provider: string; focus: number }
-  | { kind: "effort"; agentId: string; model: string; focus: number };
+  | { kind: "effort"; agentId: string; model: string; focus: number }
+  | { kind: "session-grants"; focus: number };
 
 export type NavState = {
   stack: AppScreen[];
@@ -24,6 +25,10 @@ export type NavEvent =
   | { type: "MOVE_FOCUS"; delta: -1 | 1; maxFocus?: number }
   | { type: "PAGE"; delta: -1 | 1; maxPage?: number }
   | { type: "OPEN_MODEL_ASSIGNMENT" }
+  | { type: "OPEN_SESSION_GRANTS" }
+  | { type: "REVOKE_GRANT"; grantId: string }
+  | { type: "RESTORE_BUILT_IN"; agentId: string }
+  | { type: "DEACTIVATE_AGENT"; agentId: string }
   | { type: "SELECT_PROVIDER"; provider: string }
   | { type: "SELECT_MODEL"; model: string }
   | { type: "SELECT_EFFORT"; effort: string }
@@ -86,6 +91,13 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
         : state;
     case "OPEN_MODEL_ASSIGNMENT":
       return screen.kind === "info" ? push(state, { kind: "provider", agentId: screen.agentId, focus: 0 }) : state;
+    case "OPEN_SESSION_GRANTS":
+      return screen.kind === "catalog" ? push(state, { kind: "session-grants", focus: 0 }) : state;
+    case "REVOKE_GRANT":
+      return state;
+    case "RESTORE_BUILT_IN":
+    case "DEACTIVATE_AGENT":
+      return state;
     case "SELECT_PROVIDER":
       return screen.kind === "provider" ? replaceTop(state, { kind: "model", agentId: screen.agentId, provider: event.provider, focus: 0 }) : state;
     case "SELECT_MODEL":

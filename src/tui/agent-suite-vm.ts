@@ -26,6 +26,7 @@ export function screenTitle(screen: Pick<AppScreen, "kind"> & { disabled?: boole
     case "provider": return "SELECCIONAR PROVEEDOR DE IA";
     case "model": return "SELECCIONAR EL MODELO DE IA";
     case "effort": return "SELECCIONAR NIVEL DE ESFUERZO";
+    case "session-grants": return "PERMISOS DE SESIÓN";
   }
   return `SUITE DE AGENTES — v${PLUGIN_VERSION}`;
 }
