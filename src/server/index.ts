@@ -7,6 +7,7 @@ import type { Event } from "@opencode-ai/sdk";
 import type { Part } from "@opencode-ai/sdk";
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
+import { GITHUB_AGENT_ID, GITHUB_AGENT_LEGACY_ID, normalizeAgentId } from "../core/built-in-agents.ts";
 
 type RuntimePermission = NonNullable<PluginConfig["permission"]> & {
   task?: Record<string, "allow" | "deny" | "ask">;
@@ -39,10 +40,19 @@ function applyRuntimeTaskPermission(config: PluginConfig, disabledAgents: readon
   };
 }
 
+function normalizeRuntimeAgentEntries(config: PluginConfig): void {
+  const agents = (config as RuntimePluginConfig).agent;
+  if (!agents?.[GITHUB_AGENT_LEGACY_ID]) return;
+  const legacy = agents[GITHUB_AGENT_LEGACY_ID];
+  const canonical = agents[GITHUB_AGENT_ID];
+  agents[GITHUB_AGENT_ID] = { ...(legacy ?? {}), ...(canonical ?? {}) };
+  delete agents[GITHUB_AGENT_LEGACY_ID];
+}
+
 export function applyRuntimeModelAssignments(config: PluginConfig, assignments: Record<string, string>, variants: Record<string, string> = {}): void {
   const runtimeConfig = config as RuntimePluginConfig;
   for (const [agentID, model] of Object.entries(assignments)) {
-    const agent = runtimeConfig.agent?.[agentID];
+    const agent = runtimeConfig.agent?.[normalizeAgentId(agentID)];
     if (!agent || typeof agent !== "object") continue;
     agent.model = model;
     const variant = variants[agentID];
@@ -54,7 +64,7 @@ export function applyRuntimeModelAssignments(config: PluginConfig, assignments: 
 export function applyRuntimeBuiltInOverrides(config: PluginConfig, overrides: Record<string, { description?: string; skills?: string[]; operations?: string }>): void {
   const runtimeConfig = config as RuntimePluginConfig;
   for (const [agentID, override] of Object.entries(overrides)) {
-    const agent = runtimeConfig.agent?.[agentID];
+    const agent = runtimeConfig.agent?.[normalizeAgentId(agentID)];
     if (!agent || typeof agent !== "object") continue;
     if (override.description !== undefined) agent.description = override.description;
     if (override.skills !== undefined) agent.skills = [...override.skills];
@@ -64,7 +74,10 @@ export function applyRuntimeBuiltInOverrides(config: PluginConfig, overrides: Re
 
 export function applyRuntimeDisabledAgents(config: PluginConfig, disabledAgents: readonly string[]): void {
   const runtimeConfig = config as RuntimePluginConfig;
-  for (const agentID of disabledAgents) if (runtimeConfig.agent && Object.prototype.hasOwnProperty.call(runtimeConfig.agent, agentID)) delete runtimeConfig.agent[agentID];
+  for (const agentID of disabledAgents) {
+    const canonicalID = normalizeAgentId(agentID);
+    if (runtimeConfig.agent && Object.prototype.hasOwnProperty.call(runtimeConfig.agent, canonicalID)) delete runtimeConfig.agent[canonicalID];
+  }
 }
 
 export interface AgentSuiteServerOptions {
@@ -109,7 +122,7 @@ export function createAgentSuiteServer(options: AgentSuiteServerOptions = {}) {
             messageID,
             type: "agent",
             name: agent,
-            source: { value: text, start: 0, end: text.length },
+            source: { value: `usa también agente: ${agent}`, start: 0, end: `usa también agente: ${agent}`.length },
           });
         }
       }
@@ -190,6 +203,7 @@ export const serverPlugin: Plugin = async (input) => {
   return {
     ...hooks,
     config: async (config: PluginConfig) => {
+      normalizeRuntimeAgentEntries(config);
       const configuredAgents = Object.keys(config.agent ?? {});
       try {
         const suite = loadSuiteConfig(defaultSuitePath());

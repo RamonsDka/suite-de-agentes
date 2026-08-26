@@ -3,7 +3,20 @@ import type { BuiltInDefinition, BuiltInOverride, BuiltInRuntimeAgent } from "./
 const PUBLIC_IDS = ["general", "build", "plan", "explore"] as const;
 const INTERNAL_IDS = ["compaction", "title", "summary"] as const;
 const EXCLUDED_PREFIXES = ["sdd-", "review-", "jd-"];
-const EXCLUDED_IDS = new Set(["gentle-orchestrator", "agent-especialit-github"]);
+const EXCLUDED_IDS = new Set(["gentle-orchestrator"]);
+
+export const GITHUB_AGENT_ID = "agent-github";
+export const GITHUB_AGENT_LEGACY_ID = "agent-especialit-github";
+
+/** Maps persisted compatibility aliases to the one runtime identity. */
+export function normalizeAgentId(id: string): string {
+  return id === GITHUB_AGENT_LEGACY_ID ? GITHUB_AGENT_ID : id;
+}
+
+export function mergeCanonicalAgent<T extends object>(canonical?: T, legacy?: T): T | undefined {
+  if (!canonical) return legacy ? { ...legacy } : undefined;
+  return legacy ? { ...legacy, ...canonical } : { ...canonical };
+}
 
 function baseline(description: string, operations: string, skills: string[], model = "opencode/default", effort = "medium") {
   return Object.freeze({ description, model, effort, operations, skills: Object.freeze([...skills]) });
@@ -27,13 +40,14 @@ function definition(
 }
 
 export const CANONICAL_BUILT_IN_AGENTS: readonly BuiltInDefinition[] = Object.freeze([
-  definition("general", "General", "public", "Agente general para coordinar tareas de desarrollo.", "Analiza la solicitud y ejecuta el trabajo necesario.", ["planning"]),
-  definition("build", "Build", "public", "Agente especializado en implementar cambios de código.", "Implementa cambios verificables con el menor alcance posible.", ["testing"]),
-  definition("plan", "Plan", "public", "Agente especializado en planificar cambios técnicos.", "Propón un plan técnico claro antes de modificar código.", ["planning"]),
-  definition("explore", "Explore", "public", "Agente especializado en explorar y comprender el código.", "Investiga el código existente y comunica hallazgos verificables.", ["research"]),
-  definition("compaction", "Compaction", "internal", "Agente interno para compactar el contexto de la sesión.", "Conserva el contexto esencial de forma segura.", []),
-  definition("title", "Title", "internal", "Agente interno para generar títulos de sesión.", "Genera un título breve y descriptivo.", []),
-  definition("summary", "Summary", "internal", "Agente interno para resumir la sesión.", "Resume los resultados relevantes de la sesión.", []),
+  definition("general", "General", "public", "Agente general para coordinar solicitudes de producto.", "Aclara objetivos y coordina trabajo sin sustituir especialistas.", ["planning"]),
+  definition("build", "Build", "public", "Agente de implementación de cambios de código verificables.", "Implementa cambios pequeños, ejecuta pruebas y comunica evidencia.", ["testing"]),
+  definition("plan", "Plan", "public", "Agente de planificación técnica y descomposición de cambios.", "Propone pasos, riesgos y límites antes de modificar código.", ["planning"]),
+  definition("explore", "Explore", "public", "Agente de investigación estructural del código existente.", "Inspecciona dependencias y devuelve hallazgos respaldados por evidencia.", ["research"]),
+  definition("compaction", "Compaction", "internal", "Agente interno de conservación silenciosa del contexto de sesión.", "Captura memoria durable y auditoría contextual sin editar ni delegar.", []),
+  definition("title", "Title", "internal", "Agente interno para crear títulos breves de sesión.", "Genera títulos con lecturas permitidas y auditoría silenciosa, sin efectos secundarios.", []),
+  definition("summary", "Summary", "internal", "Agente interno para resumir resultados durables de sesión.", "Resume contexto y registra auditoría silenciosa sin editar ni ejecutar shell libre.", []),
+  definition(GITHUB_AGENT_ID, GITHUB_AGENT_ID, "public", "Especialista en incidencias, revisiones, PRs y seguridad de GitHub.", "Usa flujos de gh controlados por la persona desarrolladora; aplica mínimo privilegio, SHA pinning y OIDC cuando corresponda; no realiza push autónomo ni entrega automática.", ["github-review-orchestration", "issue-creation", "branch-pr", "chained-pr"]),
 ]);
 
 export const CANONICAL_BUILT_IN_AGENT_IDS = Object.freeze(CANONICAL_BUILT_IN_AGENTS.map((agent) => agent.id));
@@ -41,11 +55,11 @@ export const CANONICAL_BUILT_IN_AGENT_IDS = Object.freeze(CANONICAL_BUILT_IN_AGE
 const canonicalByID = new Map(CANONICAL_BUILT_IN_AGENTS.map((agent) => [agent.id, agent]));
 
 export function getBuiltInDefinition(id: string): BuiltInDefinition | undefined {
-  return canonicalByID.get(id);
+  return canonicalByID.get(normalizeAgentId(id));
 }
 
 export function isCanonicalBuiltInAgent(id: string): boolean {
-  return canonicalByID.has(id);
+  return canonicalByID.has(normalizeAgentId(id));
 }
 
 export function isInternalBuiltInAgent(id: string): boolean {
@@ -69,9 +83,10 @@ export function createPendingBuiltInDefinition(id: string): BuiltInDefinition {
 }
 
 export function isDiscoverableBuiltInAgent(id: string, customIDs: readonly string[] = []): boolean {
-  return !canonicalByID.has(id)
+  const normalized = normalizeAgentId(id);
+  return !canonicalByID.has(normalized)
     && !EXCLUDED_IDS.has(id)
-    && !customIDs.includes(id)
+    && !customIDs.map(normalizeAgentId).includes(normalized)
     && !EXCLUDED_PREFIXES.some((prefix) => id.startsWith(prefix))
     && !id.endsWith("-fallback");
 }

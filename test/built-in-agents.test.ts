@@ -5,7 +5,7 @@ import {
 } from "../src/core/built-in-agents.ts";
 
 describe("built-in agent registry", () => {
-  it("defines the seven canonical agents with lowercase runtime IDs, Spanish metadata, and protected internal tiers", () => {
+  it("defines eight canonical agents with lowercase runtime IDs, Spanish metadata, protected internal tiers, and canonical GitHub visibility", () => {
     expect(CANONICAL_BUILT_IN_AGENTS.map((agent) => agent.id)).toEqual([
       "general",
       "build",
@@ -14,7 +14,13 @@ describe("built-in agent registry", () => {
       "compaction",
       "title",
       "summary",
+      "agent-github",
     ]);
+
+    expect(CANONICAL_BUILT_IN_AGENTS).toHaveLength(8);
+    expect(CANONICAL_BUILT_IN_AGENTS.map((agent) => agent.displayName)).toContain("agent-github");
+    expect(CANONICAL_BUILT_IN_AGENTS.map((agent) => agent.id)).not.toContain("agent-especialit-github");
+    expect(CANONICAL_BUILT_IN_AGENTS.map((agent) => agent.displayName)).not.toContain("agent-especialit-github");
 
     expect(CANONICAL_BUILT_IN_AGENTS.find((agent) => agent.id === "plan")).toMatchObject({
       displayName: "Plan",

@@ -1,14 +1,11 @@
-# Suite Config Persistence Specification
+# Delta for suite-config-persistence
 
-## Purpose
-
-Persist the independent Suite agent registry and its per-agent model and effort assignments without silently discarding legacy data.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Validate Built-In Overrides and Configuration Migration
 
 The system MUST validate `builtInOverrides`, `disabledAgents`, `advancedOverrides` prior to persistence. If legacy `baseOverrides` encountered, MUST migrate to `builtInOverrides` without loss. If `agent-especialit-github` entries exist, MUST normalize to canonical `agent-github` as input-only: canonical wins, legacy gap-fills, no duplicate identity, and migrated persisted output plus diagnostics MUST contain only `agent-github` (zero legacy). Invalid keys or non-existent IDs MUST be rejected before writing.
+(Previously: only `baseOverrides` migration without GitHub alias handling or precedence rules.)
 
 **User Story:** As developer, I want legacy and alias configurations to migrate automatically without losing customizations or creating duplicates.
 
@@ -42,54 +39,7 @@ The system MUST validate `builtInOverrides`, `disabledAgents`, `advancedOverride
 - WHEN validation executed
 - THEN persistence blocked with validation error
 
-### Requirement: Minimal registry shape
-
-The persisted configuration MUST contain `version`, `customAgents`, an optional `coordinator` object, optional `builtInOverrides`, optional `disabledAgents`, and optional `advancedOverrides`. The system MUST default to `{ version: 1, customAgents: {}, builtInOverrides: {}, disabledAgents: [], advancedOverrides: {} }` when no configuration exists, MUST preserve existing configurations lacking optional sections without error, and MUST reject unknown legacy suite/profile fields.
-
-#### Scenario: Read the minimal shape
-
-- GIVEN persistence contains version `1`, custom agents, and optional built-in overrides
-- WHEN the configuration is loaded
-- THEN the registry, overrides, and coordinator settings are loaded into memory accurately
-
-#### Scenario: Missing configuration
-
-- GIVEN the configuration file does not exist
-- WHEN the registry is loaded
-- THEN default empty registry shape with version `1` is returned
-- AND no global OpenCode or SDD configuration is changed
-
-### Requirement: Legacy coordinator compatibility
-
-An optional legacy `coordinator` field MAY be present in persisted configuration. The system MUST preserve it as opaque compatibility data when loading and saving, but MUST NOT validate its internal shape, expose it through current controller or TUI APIs, or treat it as an active feature.
-
-#### Scenario: Round-trip legacy data
-
-- GIVEN a valid Suite registry that includes a legacy `coordinator` field
-- WHEN the registry is loaded and saved as part of another valid change
-- THEN the legacy field is retained without becoming a current configuration surface
-
-### Requirement: Safe legacy handling
-
-An empty legacy suite configuration MAY be replaced by a successful valid write. A legacy configuration containing real suite assignments or model mappings MUST be rejected visibly in Spanish, left untouched, and never silently migrated.
-
-#### Scenario: Reject non-empty legacy assignments
-
-- GIVEN legacy suite data contains an agent-to-model assignment
-- WHEN it is loaded or saved
-- THEN the operation fails with a clear Spanish rejection
-- AND no write or automatic migration occurs
-
-### Requirement: Agent validation and atomic writes
-
-The registry MUST validate custom-agent identifiers, membership collisions, models, variants, base overrides, and disabled-agent references before persisting. Writes MUST be atomic: readers observe either the prior complete configuration or the new complete configuration, never a partial file.
-
-#### Scenario: Failed save preserves data
-
-- GIVEN a configuration fails validation or cannot complete its write
-- WHEN persistence reports the error
-- THEN the prior persisted bytes remain available
-- AND no agent registry or assignment data is lost
+## ADDED Requirements
 
 ### Requirement: Deterministic Merge and Idempotent Recovery
 

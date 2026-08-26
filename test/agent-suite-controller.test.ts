@@ -33,7 +33,9 @@ describe("Agent Suite controller adapter", () => {
     const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
     writeFileSync(path, JSON.stringify({ version: 1, customAgents: { "smoke-custom": { id: "smoke-custom", description: "Smoke custom", model: "openai/gpt-5", prompt: "Smoke", permissions: { read: "allow" }, skills: [] } }, modelAssignments: {}, variantAssignments: {} }));
     const controller = createAgentSuiteController([], "1.0.1", { path, runtime: { general: { model: "openai/gpt-5" }, "smoke-custom": { model: "openai/gpt-5" } } });
-    expect(controller.snapshot().rows.map(({ id }) => id)).toEqual(["agent-especialit-github", "build", "compaction", "explore", "general", "plan", "smoke-custom", "summary", "title"]);
+    const visibleIds = controller.snapshot().rows.map(({ id }) => id);
+    expect(visibleIds).toEqual(["agent-github", "build", "compaction", "explore", "general", "plan", "smoke-custom", "summary", "title"]);
+    expect(visibleIds.join(" ")).not.toContain("agent-especialit-github");
   });
 
   it("refreshes the catalog after an external orchestrator changes the suite config", () => {
@@ -87,12 +89,13 @@ describe("Agent Suite controller adapter", () => {
     await controller.setModelAndEffort("agent-especialit-github", "cliproxyapi/google-1/gemini-3.7-flash-high", "");
 
     expect(loadSuiteConfig(path)).toMatchObject({
-      modelAssignments: { "agent-especialit-github": "cliproxyapi/google-1/gemini-3.7-flash-high" },
+      modelAssignments: { "agent-github": "cliproxyapi/google-1/gemini-3.7-flash-high" },
       variantAssignments: {},
     });
-    const updated = controller.snapshot().rows.find((row) => row.id === "agent-especialit-github");
-    expect(updated).toMatchObject({ id: "agent-especialit-github", model: "cliproxyapi/google-1/gemini-3.7-flash-high" });
-    expect(updated).not.toHaveProperty("variant");
+    expect(readFileSync(path, "utf8")).not.toContain("agent-especialit-github");
+    const updated = controller.snapshot().rows.find((row) => row.id === "agent-github");
+    expect(updated).toMatchObject({ id: "agent-github", model: "cliproxyapi/google-1/gemini-3.7-flash-high" });
+    expect(updated).toMatchObject({ variant: "medium" });
   });
 
   it("commits a custom patch, persists it, migrates its materialized file, and rebuilds", async () => {
@@ -166,22 +169,22 @@ describe("Agent Suite controller adapter", () => {
     expect(existsSync(globalAgentPath("new-agent", home))).toBe(false);
   });
 
-  it("restores the original materialized file when rebuild fails after migration", async () => {
+  it("rejects a legacy alias rename into the canonical seed without migrating files", async () => {
     const home = mkdtempSync(join(tmpdir(), "agent-suite-controller-home-"));
     const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
     const agent = { id: "old-agent", description: "Old", model: "openai/x", prompt: "Do work.", permissions: { read: "allow" as const }, skills: [] };
     saveSuiteConfig(path, { version: 1, customAgents: { "old-agent": agent }, modelAssignments: {}, variantAssignments: {} });
     materializeGlobalAgent(agent, () => true, home);
     const originalFile = readFileSync(globalAgentPath("old-agent", home), "utf8");
-    const runtime = Object.create(null) as Record<string, { model?: string }>;
-    Object.defineProperty(runtime, "new-agent", { get: () => { throw new Error("rebuild failed"); } });
-    const controller = createAgentSuiteController([], "1.0.1", { path, home, runtime });
+    const controller = createAgentSuiteController([], "1.0.1", { path, home, runtime: { "old-agent": { model: agent.model } } });
 
-    await expect(controller.patchAgent!("old-agent", { newId: "new-agent" })).rejects.toThrow("rebuild failed");
+    await expect(controller.patchAgent!("old-agent", { newId: "agent-especialit-github" })).rejects.toThrow(/duplicates a Suite de Agentes seed member/i);
 
     expect(loadSuiteConfig(path).customAgents).toEqual({ "old-agent": agent });
+    expect(controller.snapshot().rows.some((row) => row.id === "agent-github")).toBe(true);
+    expect(controller.snapshot().rows.map((row) => row.id).join(" ")).not.toContain("agent-especialit-github");
     expect(readFileSync(globalAgentPath("old-agent", home), "utf8")).toBe(originalFile);
-    expect(existsSync(globalAgentPath("new-agent", home))).toBe(false);
+    expect(existsSync(globalAgentPath("agent-github", home))).toBe(false);
   });
 
   it("rejects assignment-map destination collisions before persisting or migrating", async () => {
