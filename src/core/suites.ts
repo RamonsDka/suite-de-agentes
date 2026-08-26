@@ -1,7 +1,7 @@
 import type { AgentCatalogRow, BuiltInOverride, CustomAgent } from "./types.ts";
-import { CANONICAL_BUILT_IN_AGENTS, getBuiltInDefinition, restoreBuiltInBaseline } from "./built-in-agents.ts";
+import { CANONICAL_BUILT_IN_AGENTS, getBuiltInDefinition, mergeCanonicalAgent, normalizeAgentId, restoreBuiltInBaseline } from "./built-in-agents.ts";
 
-export const SUITE_DE_AGENTES_SEED = ["general", "build", "plan", "explore", "compaction", "title", "summary", "agent-especialit-github"] as const;
+export const SUITE_DE_AGENTES_SEED = ["general", "build", "plan", "explore", "compaction", "title", "summary", "agent-github"] as const;
 
 export function restoreBuiltInAgentOverride(
   id: string,
@@ -19,14 +19,37 @@ export function buildSuiteDeAgentesCatalog(
   builtInOverrides: Record<string, BuiltInOverride> = {},
   disabledAgents: readonly string[] = [],
 ): AgentCatalogRow[] {
-  const seedIDs = new Set(seed);
-  const disabledIDs = new Set(disabledAgents);
-  const memberIDs = new Set([...seed, ...Object.keys(custom)]);
+  function normalizedRecords<T>(records: Record<string, T>): Record<string, T> {
+    const normalized: Record<string, T> = {};
+    for (const [id, value] of Object.entries(records)) {
+      const canonicalID = normalizeAgentId(id);
+      if (normalized[canonicalID] === undefined || canonicalID === id) normalized[canonicalID] = value;
+    }
+    return normalized;
+  }
+  function normalizedObjectRecords<T extends object>(records: Record<string, T>): Record<string, T> {
+    const normalized: Record<string, T> = {};
+    for (const [id, value] of Object.entries(records)) {
+      const canonicalID = normalizeAgentId(id);
+      normalized[canonicalID] = canonicalID === id
+        ? mergeCanonicalAgent(value, normalized[canonicalID])!
+        : mergeCanonicalAgent(normalized[canonicalID], value)!;
+    }
+    return normalized;
+  }
+  const seedIDs = new Set(seed.map(normalizeAgentId));
+  const disabledIDs = new Set(disabledAgents.map(normalizeAgentId));
+  const memberIDs = new Set([...seed, ...Object.keys(custom)].map(normalizeAgentId));
+  const normalizedRuntime = normalizedObjectRecords(runtime);
+  const normalizedCustom = normalizedObjectRecords(custom);
+  const normalizedModels = normalizedRecords(modelAssignments);
+  const normalizedVariants = normalizedRecords(variantAssignments);
+  const normalizedOverrides = normalizedObjectRecords(builtInOverrides);
   return [...memberIDs].map((id): AgentCatalogRow => {
-    const runtimeAgent = runtime[id];
-    const customAgent = custom[id];
+    const runtimeAgent = normalizedRuntime[id];
+    const customAgent = normalizedCustom[id];
     const definition = getBuiltInDefinition(id);
-    const override = builtInOverrides[id] ?? {};
+    const override = normalizedOverrides[id] ?? {};
     const row: AgentCatalogRow = {
       id,
       membership: seedIDs.has(id) ? "seed" : "custom",
@@ -35,9 +58,9 @@ export function buildSuiteDeAgentesCatalog(
       skills: override.skills ? [...override.skills] : customAgent ? [...customAgent.skills] : definition ? [...definition.baseline.skills] : [],
       consent: "explicit-current-turn",
     };
-    const model = modelAssignments[id] ?? runtimeAgent?.model ?? customAgent?.model ?? definition?.baseline.model;
+    const model = normalizedModels[id] ?? runtimeAgent?.model ?? customAgent?.model ?? definition?.baseline.model;
     const description = override.description ?? runtimeAgent?.description ?? customAgent?.description ?? definition?.baseline.description;
-    const variant = variantAssignments[id] ?? runtimeAgent?.variant ?? definition?.baseline.effort;
+    const variant = normalizedVariants[id] ?? runtimeAgent?.variant ?? definition?.baseline.effort;
     const operations = override.operations ?? customAgent?.prompt ?? definition?.baseline.operations;
     if (model !== undefined) row.model = model;
     if (description !== undefined) row.description = description;

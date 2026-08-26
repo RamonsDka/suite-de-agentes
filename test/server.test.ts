@@ -15,7 +15,7 @@ describe("server adapter", () => {
     await expect(hooks["tool.execute.before"]({ tool: "task", sessionID: "s", callID: "c2" }, { args: { subagent_type: "github-specialist" } })).resolves.toBeUndefined();
   });
 
-  it("denies and then allows agent-especialit-github only with exact current-turn consent", async () => {
+  it("normalizes legacy GitHub input while emitting only agent-github during dispatch", async () => {
     const hooks = await serverPlugin({} as never);
     await hooks.config?.({ agent: { "agent-especialit-github": {} } } as never);
     await hooks["chat.message"]?.({ sessionID: "github", agent: "gentle-orchestrator", messageID: "m1" }, {
@@ -24,14 +24,14 @@ describe("server adapter", () => {
     });
     await expect(hooks["tool.execute.before"]?.({ tool: "task", sessionID: "github", callID: "deny" }, {
       args: { subagent_type: "agent-especialit-github" },
-    })).rejects.toThrow("Blocked agent 'agent-especialit-github'");
+    })).rejects.toThrow("Blocked agent 'agent-github'");
 
     const output = {
       message: { id: "m2", agent: "gentle-orchestrator" },
       parts: [{ type: "text", text: "usa también agente: agent-especialit-github" }],
     } as never;
     await hooks["chat.message"]?.({ sessionID: "github", agent: "gentle-orchestrator", messageID: "m2" }, output);
-    expect((output as { parts: Array<Record<string, unknown>> }).parts).toContainEqual(expect.objectContaining({ type: "agent", name: "agent-especialit-github" }));
+    expect((output as { parts: Array<Record<string, unknown>> }).parts).toContainEqual(expect.objectContaining({ type: "agent", name: "agent-github" }));
     await expect(hooks["tool.execute.before"]?.({ tool: "task", sessionID: "github", callID: "allow" }, {
       args: { subagent_type: "agent-especialit-github" },
     })).resolves.toBeUndefined();
@@ -43,7 +43,18 @@ describe("server adapter", () => {
     });
     await expect(hooks["tool.execute.before"]?.({ tool: "task", sessionID: "github", callID: "expired" }, {
       args: { subagent_type: "agent-especialit-github" },
-    })).rejects.toThrow("Blocked agent 'agent-especialit-github'");
+    })).rejects.toThrow("Blocked agent 'agent-github'");
+  });
+
+  it("runs the canonical GitHub dispatch path with legacy input and no visible alias leakage", async () => {
+    const hooks = await serverPlugin({} as never);
+    await hooks.config?.({ agent: { "agent-especialit-github": {} } } as never);
+    const output = { message: { id: "canonical", agent: "gentle-orchestrator" }, parts: [{ type: "text", text: "usa también agente: agent-especialit-github" }] } as never;
+    await hooks["chat.message"]?.({ sessionID: "canonical", agent: "gentle-orchestrator", messageID: "canonical" }, output);
+    await expect(hooks["tool.execute.before"]?.({ tool: "task", sessionID: "canonical", callID: "canonical" }, { args: { subagent_type: "agent-especialit-github" } })).resolves.toBeUndefined();
+    expect(JSON.stringify(output)).toContain("agent-github");
+    const generated = (output as { parts: Array<Record<string, unknown>> }).parts.find((part) => part.type === "agent")!;
+    expect(JSON.stringify(generated)).not.toContain("agent-especialit-github");
   });
 
   it("fails closed when the current message ID or session agent cannot be resolved", async () => {
@@ -134,7 +145,7 @@ describe("server adapter", () => {
 
   it("keeps general, explore, GitHub, custom, and lookalike agents blocked without exact consent", async () => {
     const hooks = await serverPlugin({} as never);
-    const external = ["general", "explore", "agent-especialit-github", "custom-agent", "sdd-evil"];
+    const external = ["general", "explore", "agent-github", "custom-agent", "sdd-evil"];
     await hooks.config?.({
       agent: Object.fromEntries([...INTERNAL_AGENT_ALLOWLIST, ...external].map((agent) => [agent, {}])),
     } as never);
@@ -212,13 +223,14 @@ describe("server adapter", () => {
       expect(config.model).toBe("openai/root-model");
       expect(config.agent.general.model).toBe("openai/assigned-general");
       expect(config.agent.general.variant).toBe("high");
-      expect(config.agent["agent-especialit-github"].model).toBe("openai/assigned-github");
-      expect(config.agent["agent-especialit-github"].variant).toBeUndefined();
+       const normalizedAgents = config.agent as Record<string, { model: string; variant?: string }>;
+       expect(normalizedAgents["agent-github"]?.model).toBe("openai/assigned-github");
+       expect(normalizedAgents["agent-github"]?.variant).toBeUndefined();
       expect(config.agent.untouched.model).toBe("openai/keep");
       expect(config.agent.untouched.variant).toBe("keep-variant");
-      expect(JSON.parse(readFileSync(defaultSuitePath(), "utf8")).modelAssignments).toEqual({
-        general: "openai/assigned-general",
-        "agent-especialit-github": "openai/assigned-github",
+       expect(JSON.parse(readFileSync(defaultSuitePath(), "utf8")).modelAssignments).toEqual({
+         general: "openai/assigned-general",
+         "agent-github": "openai/assigned-github",
       });
     } finally {
       vi.unstubAllEnvs();
@@ -249,7 +261,7 @@ describe("server adapter", () => {
       await hooks.config?.(config as never);
 
       expect(config.agent.general).toBeUndefined();
-      expect(config.agent["agent-especialit-github"]).toMatchObject({ model: "openai/assigned-github", variant: "high", description: "Edited GitHub", prompt: "Use GitHub safely.", skills: ["testing"] });
+       expect((config.agent as Record<string, unknown>)["agent-github"]).toMatchObject({ model: "openai/assigned-github", variant: "high", description: "Edited GitHub", prompt: "Use GitHub safely.", skills: ["testing"] });
       expect((config.permission as { task?: Record<string, string> }).task?.general).toBe("deny");
 
       await hooks["chat.message"]?.({ sessionID: "disabled", agent: "gentle-orchestrator", messageID: "m1" }, {

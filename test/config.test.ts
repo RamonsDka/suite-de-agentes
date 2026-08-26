@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseSuiteConfig, patchCustomAgent, setAgentModelAssignment, validateAgentId, validateModelId, validateSkillId, validateVariantId } from "../src/core/config.ts";
 import { restoreBuiltInBaseline } from "../src/core/built-in-agents.ts";
+import { normalizeAgentId } from "../src/core/built-in-agents.ts";
 
 const customAgent = {
   id: "local-helper",
@@ -126,7 +127,7 @@ describe("suite config", () => {
 
     expect(parsed.modelAssignments).toEqual({
       general: "openai/gpt-5.6-luna",
-      "agent-especialit-github": "anthropic/claude-sonnet",
+      "agent-github": "anthropic/claude-sonnet",
     });
     expect(parsed.variantAssignments).toEqual({ general: "high" });
     expect(() => parseSuiteConfig({ version: 1, customAgents: {}, modelAssignments: { "../escape": "openai/x" } })).toThrow();
@@ -148,20 +149,20 @@ describe("suite config", () => {
     const config = parseSuiteConfig({
       version: 1,
       customAgents: {},
-      modelAssignments: { general: "openai/old", "agent-especialit-github": "openai/keep" },
-      variantAssignments: { general: "high", "agent-especialit-github": "medium" },
+      modelAssignments: { general: "openai/old", "agent-github": "openai/keep" },
+      variantAssignments: { general: "high", "agent-github": "medium" },
     });
 
     expect(setAgentModelAssignment(config, "general", "openai/new")).toEqual({
       version: 1,
       customAgents: {},
-      modelAssignments: { general: "openai/new", "agent-especialit-github": "openai/keep" },
-      variantAssignments: { "agent-especialit-github": "medium" },
+      modelAssignments: { general: "openai/new", "agent-github": "openai/keep" },
+      variantAssignments: { "agent-github": "medium" },
     });
 
     expect(setAgentModelAssignment(config, "general", "openai/new", "low").variantAssignments).toEqual({
       general: "low",
-      "agent-especialit-github": "medium",
+      "agent-github": "medium",
     });
   });
 
@@ -169,14 +170,14 @@ describe("suite config", () => {
     const config = parseSuiteConfig({
       version: 1,
       customAgents: {},
-      modelAssignments: { "agent-especialit-github": "opencode/x-preview-f-free" },
-      variantAssignments: { "agent-especialit-github": "low" },
+      modelAssignments: { "agent-github": "opencode/x-preview-f-free" },
+      variantAssignments: { "agent-github": "low" },
     });
 
     expect(setAgentModelAssignment(config, "agent-especialit-github", "cliproxyapi/google-1/gemini-3.7-flash-high")).toEqual({
       version: 1,
       customAgents: {},
-      modelAssignments: { "agent-especialit-github": "cliproxyapi/google-1/gemini-3.7-flash-high" },
+      modelAssignments: { "agent-github": "cliproxyapi/google-1/gemini-3.7-flash-high" },
       variantAssignments: {},
     });
   });
@@ -291,5 +292,37 @@ describe("suite config", () => {
       build: { effort: "high" },
     })).toEqual({ build: { effort: "high" } });
     expect(() => restoreBuiltInBaseline("invalid-agent")).toThrow(/built-in|integrado|unknown/i);
+  });
+
+  it("normalizes the GitHub alias everywhere in persisted configuration with canonical fields winning", () => {
+    const parsed = parseSuiteConfig({
+      version: 1,
+      customAgents: {},
+      modelAssignments: {
+        "agent-especialit-github": "openai/legacy",
+        "agent-github": "openai/canonical",
+      },
+      variantAssignments: { "agent-especialit-github": "low" },
+      baseOverrides: { "agent-especialit-github": { description: "Legacy description", operations: "Legacy operation" } },
+      builtInOverrides: { "agent-github": { description: "Canonical description" } },
+      disabledAgents: ["agent-especialit-github", "agent-github"],
+    });
+
+    expect(normalizeAgentId("agent-especialit-github")).toBe("agent-github");
+    expect(parsed.modelAssignments).toEqual({ "agent-github": "openai/canonical" });
+    expect(parsed.variantAssignments).toEqual({ "agent-github": "low" });
+    expect(parsed.builtInOverrides).toEqual({
+      "agent-github": { description: "Canonical description", operations: "Legacy operation" },
+    });
+    expect(parsed.disabledAgents).toEqual(["agent-github"]);
+  });
+
+  it("rejects a custom identity duplicated through the GitHub alias", () => {
+    expect(() => parseSuiteConfig({
+      version: 1,
+      customAgents: {
+        "agent-especialit-github": { ...customAgent, id: "agent-especialit-github" },
+      },
+    })).toThrow(/duplicate|seed|canonical/i);
   });
 });
