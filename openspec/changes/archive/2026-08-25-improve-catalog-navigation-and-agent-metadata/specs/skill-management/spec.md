@@ -1,45 +1,11 @@
-# Skill Management Specification
+# Delta for skill-management
 
-## Purpose
-
-Keep skill information visible in the catalog while leaving all skill changes to the external orchestrator.
-
-## Requirements
-
-### Requirement: Read-only skill display
-
-Agent details MUST display the skills already assigned to the agent in the existing structured detail layout. An agent with no assigned skills MUST display the established empty value.
-
-#### Scenario: Inspect assigned skills
-
-- GIVEN an agent has assigned skills in persisted configuration
-- WHEN the user opens the agent details
-- THEN the skills are displayed read-only with the rest of the agent information
-
-### Requirement: No Suite skill workflow
-
-The Suite TUI MUST NOT offer skill discovery, a picker, assignment or detachment, recommendations, generation, installation, conflict resolution, or pending-skill ingestion. It MUST NOT perform skill-related network or disk side effects from catalog interaction.
-
-#### Scenario: Open agent details
-
-- GIVEN the user opens any catalog member
-- WHEN the available actions render
-- THEN no skill-management action is available
-- AND only model-and-effort assignment and back navigation remain
-
-### Requirement: External ownership of skill changes
-
-The user's external orchestrator owns agent skill changes through retained persistence and controller seams. Generic skill package validation and safe installation utilities MAY be used by external integrations, but they are not exposed as a Suite TUI workflow.
-
-#### Scenario: Refresh externally changed skills
-
-- GIVEN the external orchestrator updates an agent's assigned skills in valid persisted Suite configuration
-- WHEN the catalog is opened or refreshed
-- THEN the updated skills are displayed read-only
+## MODIFIED Requirements
 
 ### Requirement: Recommend-First Search Hierarchy
 
 When evaluating agent capabilities during authoring, the system MUST check matching installed skills first, deduplicate by responsibility, and present match rationales. It MUST reuse one installed skill per responsibility and complement any missing guidance via prompt or metadata updates rather than installing overlapping external assets. If no installed match exists, the system MUST record the capability as pending and MUST NOT query remote registries or generate code until post-approval ingestion.
+(Previously: checked installed skills first but without responsibility deduplication, reuse complement rule, or explicit external overlap prohibition.)
 
 **User Story:** As a developer, I want installed skills reused first with clear rationale and missing gaps complemented without redundant installs.
 
@@ -63,6 +29,8 @@ When evaluating agent capabilities during authoring, the system MUST check match
 - GIVEN no installed skill matches capability
 - WHEN coordinator identifies it
 - THEN skill tagged pending without remote fetch or generation
+
+## ADDED Requirements
 
 ### Requirement: Agent-Github Skill Binding and Security Guidance
 

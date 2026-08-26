@@ -22,6 +22,7 @@ export type NavEvent =
   | { type: "CATALOG_QUERY"; value: string }
   | { type: "FOCUS_CATALOG_RESULTS"; query?: string }
   | { type: "FOCUS_CATALOG_SEARCH" }
+  | { type: "MOVE_CATALOG_CURSOR"; delta: -1 | 1; filteredCount: number; pageSize: number }
   | { type: "MOVE_FOCUS"; delta: -1 | 1; maxFocus?: number }
   | { type: "PAGE"; delta: -1 | 1; maxPage?: number }
   | { type: "OPEN_MODEL_ASSIGNMENT" }
@@ -83,6 +84,18 @@ export function reduceNav(state: NavState, event: NavEvent): NavState {
       return screen.kind === "catalog" ? replaceTop(state, { ...screen, query: event.query ?? screen.query, searchFocused: false }) : state;
     case "FOCUS_CATALOG_SEARCH":
       return screen.kind === "catalog" ? replaceTop(state, { ...screen, searchFocused: true }) : state;
+    case "MOVE_CATALOG_CURSOR": {
+      if (screen.kind !== "catalog" || event.filteredCount <= 0) return state;
+      const pageSize = Math.max(1, Math.floor(event.pageSize));
+      const currentIndex = screen.page * pageSize + screen.focus;
+      const nextIndex = clamp(currentIndex + event.delta, event.filteredCount - 1);
+      return replaceTop(state, {
+        ...screen,
+        page: Math.floor(nextIndex / pageSize),
+        focus: nextIndex % pageSize,
+        searchFocused: false,
+      });
+    }
     case "MOVE_FOCUS":
       return replaceTop(state, { ...screen, ...(screen.kind === "catalog" ? { searchFocused: false } : {}), focus: clamp(screen.focus + event.delta, event.maxFocus ?? 0) });
     case "PAGE":

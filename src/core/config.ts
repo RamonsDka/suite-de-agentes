@@ -1,5 +1,5 @@
 import type { BaseAgentOverride, BuiltInOverride, CustomAgent, SuiteConfig } from "./types.ts";
-import { isCanonicalBuiltInAgent } from "./built-in-agents.ts";
+import { isCanonicalBuiltInAgent, mergeCanonicalAgent, normalizeAgentId } from "./built-in-agents.ts";
 import { SUITE_DE_AGENTES_SEED } from "./suites.ts";
 
 const ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
@@ -24,6 +24,17 @@ function safeRecord(value: unknown, label: string): Record<string, unknown> {
 export function validateAgentId(value: string): string {
   if (typeof value !== "string" || !ID.test(value) || value.length > 64) throw new Error("Invalid agent id: use lowercase kebab-case without path separators");
   return value;
+}
+
+function normalizeRecords<T>(input: Record<string, T>, merge = (canonical: T, _legacy: T) => canonical): Record<string, T> {
+  const normalized: Record<string, T> = {};
+  for (const [id, value] of Object.entries(input)) {
+    const canonicalID = normalizeAgentId(id);
+    normalized[canonicalID] = canonicalID === id || normalized[canonicalID] === undefined
+      ? value
+      : merge(normalized[canonicalID], value);
+  }
+  return normalized;
 }
 
 export function validateModelId(value: string): string {
@@ -134,7 +145,8 @@ export function parseSuiteConfig(value: unknown): SuiteConfig {
   const seedIDs = new Set<string>(SUITE_DE_AGENTES_SEED);
   for (const [id, raw] of Object.entries(customRaw)) {
     validateAgentId(id);
-    if (seedIDs.has(id)) throw new Error(`Custom agent ID '${id}' duplicates a Suite de Agentes seed member`);
+    const normalizedID = normalizeAgentId(id);
+    if (seedIDs.has(normalizedID) || customAgents[normalizedID]) throw new Error(`Custom agent ID '${id}' duplicates a Suite de Agentes seed member`);
     const agent = safeRecord(raw, `custom agent ${id}`);
     if (agent.id !== id || typeof agent.description !== "string" || typeof agent.model !== "string" || typeof agent.prompt !== "string") throw new Error(`Invalid custom agent ${id}`);
     let model: string;
@@ -142,62 +154,84 @@ export function parseSuiteConfig(value: unknown): SuiteConfig {
     const skills = Array.isArray(agent.skills) && agent.skills.every((skill) => typeof skill === "string" && ID.test(skill)) ? agent.skills as string[] : [];
     const permissions = safeRecord(agent.permissions, `permissions for ${id}`) as Record<string, "allow" | "deny" | "ask">;
     for (const permission of Object.values(permissions)) if (!["allow", "deny", "ask"].includes(permission)) throw new Error(`Invalid permission for ${id}`);
-    const parsedAgent = { id, description: agent.description, model, prompt: agent.prompt, permissions, skills };
-    if (agent.materializeGlobal === true) customAgents[id] = { ...parsedAgent, materializeGlobal: true };
-    else customAgents[id] = parsedAgent;
+    const parsedAgent = { id: normalizedID, description: agent.description, model, prompt: agent.prompt, permissions, skills };
+    if (agent.materializeGlobal === true) customAgents[normalizedID] = { ...parsedAgent, materializeGlobal: true };
+    else customAgents[normalizedID] = parsedAgent;
   }
   const assignmentsRaw = root.modelAssignments === undefined ? {} : safeRecord(root.modelAssignments, "modelAssignments");
-  const modelAssignments: SuiteConfig["modelAssignments"] = Object.create(null) as SuiteConfig["modelAssignments"];
+  const rawModels: Record<string, string> = {};
   for (const [agentID, rawModel] of Object.entries(assignmentsRaw)) {
     validateAgentId(agentID);
-    try { modelAssignments[agentID] = validateModelId(rawModel as string); } catch { throw new Error(`Invalid model assignment for ${agentID}`); }
+    try { rawModels[agentID] = validateModelId(rawModel as string); } catch { throw new Error(`Invalid model assignment for ${agentID}`); }
   }
+  const modelAssignments = normalizeRecords(rawModels);
   const variantsRaw = root.variantAssignments === undefined ? {} : safeRecord(root.variantAssignments, "variantAssignments");
-  const variantAssignments: SuiteConfig["variantAssignments"] = Object.create(null) as SuiteConfig["variantAssignments"];
+  const rawVariants: Record<string, string> = {};
   for (const [agentID, rawVariant] of Object.entries(variantsRaw)) {
     validateAgentId(agentID);
-    try { variantAssignments[agentID] = validateVariantId(rawVariant as string); } catch { throw new Error(`Invalid variant assignment for ${agentID}`); }
+    try { rawVariants[agentID] = validateVariantId(rawVariant as string); } catch { throw new Error(`Invalid variant assignment for ${agentID}`); }
   }
-  function parseBuiltInOverrides(value: unknown, label: string): Record<string, BuiltInOverride> {
+  const variantAssignments = normalizeRecords(rawVariants);
+  function parseBuiltInOverrides(value: unknown, label: string, ignoreMalformedGitHubAlias = false): Record<string, BuiltInOverride> {
     const overridesRaw = safeRecord(value, label);
     const overrides: Record<string, BuiltInOverride> = {};
     for (const [agentID, raw] of Object.entries(overridesRaw)) {
       validateAgentId(agentID);
       if (!isCanonicalBuiltInAgent(agentID) && !SUITE_DE_AGENTES_SEED.includes(agentID as (typeof SUITE_DE_AGENTES_SEED)[number])) throw new Error(`Built-in override must target a canonical built-in agent: ${agentID}`);
-      const override = safeRecord(raw, `${label} ${agentID}`);
+      let override: Record<string, unknown>;
+      try {
+        override = safeRecord(raw, `${label} ${agentID}`);
+      } catch (error) {
+        if (ignoreMalformedGitHubAlias && agentID === "agent-especialit-github") continue;
+        throw error;
+      }
       const parsed: BuiltInOverride = {};
-      if (override.description !== undefined) {
-        if (typeof override.description !== "string") throw new Error(`Invalid built-in override ${agentID}`);
-        parsed.description = override.description;
+      try {
+        if (override.description !== undefined) {
+          if (typeof override.description !== "string") throw new Error(`Invalid built-in override ${agentID}`);
+          parsed.description = override.description;
+        }
+        if (override.skills !== undefined) {
+          if (!Array.isArray(override.skills)) throw new Error(`Invalid skills for built-in override ${agentID}`);
+          parsed.skills = override.skills.map((skill) => validateSkillId(skill as string));
+        }
+        if (override.operations !== undefined) {
+          if (typeof override.operations !== "string") throw new Error(`Invalid operations for built-in override ${agentID}`);
+          parsed.operations = override.operations;
+        }
+        if (override.model !== undefined) {
+          try { parsed.model = validateModelId(override.model as string); } catch { throw new Error(`Invalid model for built-in override ${agentID}`); }
+        }
+        if (override.effort !== undefined) {
+          if (typeof override.effort !== "string" || !override.effort.trim()) throw new Error(`Invalid effort for built-in override ${agentID}`);
+          parsed.effort = override.effort;
+        }
+      } catch (error) {
+        if (ignoreMalformedGitHubAlias && agentID === "agent-especialit-github") continue;
+        throw error;
       }
-      if (override.skills !== undefined) {
-        if (!Array.isArray(override.skills)) throw new Error(`Invalid skills for built-in override ${agentID}`);
-        parsed.skills = override.skills.map((skill) => validateSkillId(skill as string));
-      }
-      if (override.operations !== undefined) {
-        if (typeof override.operations !== "string") throw new Error(`Invalid operations for built-in override ${agentID}`);
-        parsed.operations = override.operations;
-      }
-      if (override.model !== undefined) {
-        try { parsed.model = validateModelId(override.model as string); } catch { throw new Error(`Invalid model for built-in override ${agentID}`); }
-      }
-      if (override.effort !== undefined) {
-        if (typeof override.effort !== "string" || !override.effort.trim()) throw new Error(`Invalid effort for built-in override ${agentID}`);
-        parsed.effort = override.effort;
-      }
-      overrides[agentID] = parsed;
+      const normalizedID = normalizeAgentId(agentID);
+      const existing = overrides[normalizedID];
+      overrides[normalizedID] = existing === undefined
+        ? parsed
+        : agentID === normalizedID
+          ? mergeCanonicalAgent(parsed, existing)!
+          : mergeCanonicalAgent(existing, parsed)!;
     }
     return overrides;
   }
   const legacyOverrides = root.baseOverrides === undefined ? {} : parseBuiltInOverrides(root.baseOverrides, "baseOverrides");
-  const builtInOverrides = root.builtInOverrides === undefined ? legacyOverrides : {
-    ...legacyOverrides,
-    ...parseBuiltInOverrides(root.builtInOverrides, "builtInOverrides"),
-  };
+  const canonicalOverrides = root.builtInOverrides === undefined ? undefined : parseBuiltInOverrides(root.builtInOverrides, "builtInOverrides", true);
+  const builtInOverrides = canonicalOverrides === undefined ? legacyOverrides : Object.fromEntries(
+    [...new Set([...Object.keys(legacyOverrides), ...Object.keys(canonicalOverrides)])].map((id) => [
+      id,
+      mergeCanonicalAgent(canonicalOverrides[id], legacyOverrides[id])!,
+    ]),
+  );
   const hasDisabledAgents = root.disabledAgents !== undefined;
   const disabledAgents = root.disabledAgents === undefined ? [] : [...new Set(Array.isArray(root.disabledAgents) ? root.disabledAgents.map((id) => {
     if (typeof id !== "string") throw new Error("Invalid disabled agent id");
-    return validateAgentId(id);
+    return normalizeAgentId(validateAgentId(id));
   }) : (() => { throw new Error("disabledAgents must be an array"); })())];
   for (const id of disabledAgents) if (!isCanonicalBuiltInAgent(id) && !Object.prototype.hasOwnProperty.call(customAgents, id)) throw new Error(`Unknown disabled agent: ${id}`);
   let advancedOverrides: SuiteConfig["advancedOverrides"];
@@ -218,7 +252,7 @@ export function parseSuiteConfig(value: unknown): SuiteConfig {
 }
 
 export function setAgentModelAssignment(config: SuiteConfig, agentID: string, model: string, variant?: string): SuiteConfig {
-  const validatedAgentID = validateAgentId(agentID);
+  const validatedAgentID = normalizeAgentId(validateAgentId(agentID));
   const validatedModel = validateModelId(model);
   const variantAssignments = { ...(config.variantAssignments ?? {}) };
   if (variant === undefined) delete variantAssignments[validatedAgentID];

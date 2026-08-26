@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { globalAgentPath, materializeGlobalAgent, renameMaterializedAgent, renameMaterializedAgentResult } from "../src/core/agents.ts";
+import { globalAgentPath, materializeGlobalAgent, migrateGitHubMaterializedAgent, renameMaterializedAgent, renameMaterializedAgentResult } from "../src/core/agents.ts";
 
 describe("agent materialization", () => {
   it("requires confirmation and writes only a validated global markdown path", () => {
@@ -63,5 +63,59 @@ describe("agent materialization", () => {
     expect(() => renameMaterializedAgent("old-agent", "new-agent", { ...oldAgent, id: "new-agent", prompt: "" }, home)).toThrow(/requires model and prompt/i);
     expect(existsSync(globalAgentPath("old-agent", home))).toBe(true);
     expect(existsSync(globalAgentPath("new-agent", home))).toBe(false);
+  });
+
+  it("migrates legacy GitHub markdown atomically, preserves manual content and archives only after promotion", () => {
+    const home = mkdtempSync(join(tmpdir(), "agent-suite-home-"));
+    const legacyPath = globalAgentPath("agent-especialit-github", home);
+    const legacyBytes = "---\nname: agent-especialit-github\ndescription: Manual description\n---\nManual instructions stay intact.\n";
+    materializeGlobalAgent({ id: "agent-especialit-github", description: "Legacy", model: "openai/x", prompt: "Old", permissions: {}, skills: [] }, () => true, home);
+    writeFileSync(legacyPath, legacyBytes);
+    chmodSync(legacyPath, 0o640);
+    const originalMode = statSync(legacyPath).mode & 0o777;
+
+    const migrated = migrateGitHubMaterializedAgent(home);
+    const canonicalPath = globalAgentPath("agent-github", home);
+
+    expect(migrated).toEqual({ kind: "migrated", path: canonicalPath });
+    expect(readFileSync(canonicalPath, "utf8")).toContain("Manual instructions stay intact.");
+    expect(readFileSync(canonicalPath, "utf8")).toContain("name: agent-github");
+    expect(readFileSync(canonicalPath, "utf8")).not.toContain("agent-especialit-github");
+    expect(statSync(canonicalPath).mode & 0o777).toBe(originalMode);
+    expect(readFileSync(`${legacyPath}.legacy.bak`, "utf8")).toBe(legacyBytes);
+    expect(migrateGitHubMaterializedAgent(home)).toEqual({ kind: "unchanged", path: canonicalPath });
+  });
+
+  it("archives a coexisting legacy file without replacing the canonical customization", () => {
+    const home = mkdtempSync(join(tmpdir(), "agent-suite-home-"));
+    const legacyPath = globalAgentPath("agent-especialit-github", home);
+    const canonicalPath = globalAgentPath("agent-github", home);
+    const legacyBytes = "---\nname: agent-especialit-github\ndescription: Legacy fallback\n---\nLegacy instructions.\n";
+    const canonicalBytes = "---\nname: agent-github\ndescription: Canonical customization\n---\nCanonical instructions.\n";
+    materializeGlobalAgent({ id: "agent-especialit-github", description: "Legacy", model: "openai/x", prompt: "Old", permissions: {}, skills: [] }, () => true, home);
+    materializeGlobalAgent({ id: "agent-github", description: "Canonical", model: "openai/x", prompt: "New", permissions: {}, skills: [] }, () => true, home);
+    writeFileSync(legacyPath, legacyBytes);
+    writeFileSync(canonicalPath, canonicalBytes);
+
+    expect(migrateGitHubMaterializedAgent(home)).toEqual({ kind: "unchanged", path: canonicalPath });
+    expect(readFileSync(canonicalPath, "utf8")).toBe(canonicalBytes);
+    expect(existsSync(legacyPath)).toBe(false);
+    expect(readFileSync(`${legacyPath}.legacy.bak`, "utf8")).toBe(legacyBytes);
+    expect(migrateGitHubMaterializedAgent(home)).toEqual({ kind: "unchanged", path: canonicalPath });
+  });
+
+  it("restores legacy bytes and mode when canonical promotion fails", () => {
+    const home = mkdtempSync(join(tmpdir(), "agent-suite-home-"));
+    const legacyPath = globalAgentPath("agent-especialit-github", home);
+    materializeGlobalAgent({ id: "agent-especialit-github", description: "Legacy", model: "openai/x", prompt: "Old", permissions: {}, skills: [] }, () => true, home);
+    const bytes = readFileSync(legacyPath, "utf8");
+    chmodSync(legacyPath, 0o640);
+    const originalMode = statSync(legacyPath).mode & 0o777;
+
+    expect(() => migrateGitHubMaterializedAgent(home, () => { throw new Error("interrupted"); })).toThrow("interrupted");
+    expect(readFileSync(legacyPath, "utf8")).toBe(bytes);
+    expect(statSync(legacyPath).mode & 0o777).toBe(originalMode);
+    expect(existsSync(globalAgentPath("agent-github", home))).toBe(false);
+    expect(existsSync(`${legacyPath}.legacy.bak`)).toBe(false);
   });
 });

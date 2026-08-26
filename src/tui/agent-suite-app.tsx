@@ -3,7 +3,7 @@ import { useKeyboard } from "@opentui/solid";
 import type { KeyEvent, TuiTheme } from "@opencode-ai/plugin/tui";
 import { initialNavState, reduceNav, type AppScreen, type NavEvent, type NavState } from "./agent-suite-nav.ts";
 import { applyBuiltInAgentAction, type AgentSuiteController } from "./agent-suite-controller.ts";
-import { filterCatalogRows, pageCount, pageRows, screenTitle } from "./agent-suite-vm.ts";
+import { filterCatalogRows, MAX_VISIBLE_ROWS, pageCount, pageRows, screenTitle } from "./agent-suite-vm.ts";
 import { SuiteShell } from "./screens/suite-shell.tsx";
 import { Catalog } from "./screens/catalog.tsx";
 import { AgentInfo, agentInfoActions } from "./screens/agent-info.tsx";
@@ -67,9 +67,10 @@ export function eventForKey(
   if (key.name === "/" && screen.kind === "catalog") return { type: "FOCUS_CATALOG_SEARCH" };
   if (key.name === "g" && screen.kind === "catalog") return { type: "OPEN_SESSION_GRANTS" };
 
-  const maxFocus = screen.kind === "catalog"
-    ? Math.max(0, Math.min(5, catalogRowCount - screen.page * 6 - 1))
-    : screen.kind === "info"
+  if (screen.kind === "catalog" && (key.name === "up" || key.name === "left" || key.name === "down" || key.name === "right")) {
+    return { type: "MOVE_CATALOG_CURSOR", delta: key.name === "up" || key.name === "left" ? -1 : 1, filteredCount: catalogRowCount, pageSize: MAX_VISIBLE_ROWS };
+  }
+  const maxFocus = screen.kind === "info"
       ? agentInfoActions().length - 1
       : screen.kind === "provider"
         ? Math.max(0, (options.providers?.length ?? 0) - 1)
@@ -216,7 +217,7 @@ export function AgentSuiteApp(props: AgentSuiteAppProps): JSX.Element {
         const current = screen();
         if (current.kind === "catalog") {
           const catalogRows = rows();
-          return <Catalog theme={props.theme} rows={catalogRows} page={current.page} focus={current.focus} query={current.query} searchFocused={current.searchFocused} onDraftChange={(value) => { catalogSearchDraft = value; }} onFocusResults={(query) => dispatch({ type: "FOCUS_CATALOG_RESULTS", query })} onFocusSearch={() => { catalogSearchDraft = current.query; dispatch({ type: "FOCUS_CATALOG_SEARCH" }); }} onMoveFocus={(delta, maxFocus) => dispatch({ type: "MOVE_FOCUS", delta, maxFocus })} onActivate={(identity) => dispatch({ type: "ACTIVATE_AGENT", agentId: identity.agentId })} onPage={(delta) => dispatch({ type: "PAGE", delta, maxPage: Math.max(0, pageCount(filterCatalogRows(catalogRows, current.searchFocused ? catalogSearchDraft : current.query).length) - 1) })} />;
+          return <Catalog theme={props.theme} rows={catalogRows} page={current.page} focus={current.focus} query={current.query} searchFocused={current.searchFocused} onDraftChange={(value) => { catalogSearchDraft = value; }} onFocusResults={(query) => dispatch({ type: "FOCUS_CATALOG_RESULTS", query })} onFocusSearch={() => { catalogSearchDraft = current.query; dispatch({ type: "FOCUS_CATALOG_SEARCH" }); }} onMoveFocus={(delta, filteredCount) => dispatch({ type: "MOVE_CATALOG_CURSOR", delta, filteredCount, pageSize: MAX_VISIBLE_ROWS })} onActivate={(identity) => dispatch({ type: "ACTIVATE_AGENT", agentId: identity.agentId })} onPage={(delta) => dispatch({ type: "PAGE", delta, maxPage: Math.max(0, pageCount(filterCatalogRows(catalogRows, current.searchFocused ? catalogSearchDraft : current.query).length) - 1) })} />;
         }
         if (current.kind === "session-grants") return <SessionGrants theme={props.theme} grants={props.controller.activeGrants?.() ?? []} focus={current.focus} onRevoke={(grantID) => { void props.controller.revokeGrant?.(grantID).catch((error) => setOperationError(operationErrorMessage(error))); }} onBack={() => dispatch({ type: "BACK" })} />;
         const row = rows().find((item) => item.id === current.agentId);
