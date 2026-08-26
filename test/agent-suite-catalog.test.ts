@@ -4,7 +4,9 @@ import { CATALOG_EMPTY_MESSAGE, catalogRowLabel, dispatchCatalogWheel, captureCa
 import { agentInfoActions, infoActionKeys } from "../src/tui/screens/agent-info.tsx";
 import { eventForKey, normalizeCatalogState } from "../src/tui/agent-suite-app.tsx";
 import { sessionGrantLabel } from "../src/tui/screens/session-grants.tsx";
+import { formatAgentInfo } from "../src/tui/screens/agent-info.tsx";
 import { reduceNav } from "../src/tui/agent-suite-nav.ts";
+import { buildSuiteDeAgentesCatalog } from "../src/core/suites.ts";
 import type { KeyEvent } from "@opencode-ai/plugin/tui";
 
 const rows = Array.from({ length: 14 }, (_, index) => ({ id: `agent-${index}`, membership: "seed" as const, enabled: true, skills: [], consent: "explicit-current-turn" as const }));
@@ -67,7 +69,7 @@ describe("Agent Suite catalog", () => {
     const catalog = { stack: [{ kind: "catalog", page: 1, focus: 2, query: "", searchFocused: false }], busy: false, closing: false } as import("../src/tui/agent-suite-nav.ts").NavState;
     expect(eventForKey({ name: "pageup" } as KeyEvent, catalog, rows.length)).toEqual({ type: "PAGE", delta: -1, maxPage: 2 });
     expect(eventForKey({ name: "pagedown" } as KeyEvent, catalog, rows.length)).toEqual({ type: "PAGE", delta: 1, maxPage: 2 });
-    expect(eventForKey({ name: "down" } as KeyEvent, catalog, rows.length)).toEqual({ type: "MOVE_FOCUS", delta: 1, maxFocus: 5 });
+    expect(eventForKey({ name: "down" } as KeyEvent, catalog, rows.length)).toEqual({ type: "MOVE_CATALOG_CURSOR", delta: 1, filteredCount: rows.length, pageSize: 6 });
     expect(eventForKey({ name: "return" } as KeyEvent, catalog, rows.length, "agent-8")).toEqual({ type: "ACTIVATE_AGENT", agentId: "agent-8" });
   });
 
@@ -78,7 +80,7 @@ describe("Agent Suite catalog", () => {
       { ...rows[2], id: "research-two" },
     ];
     const searching = reduceNav({ stack: [{ kind: "catalog", page: 0, focus: 0, query: "", searchFocused: true }], busy: false, closing: false }, { type: "FOCUS_CATALOG_RESULTS", query: "research" });
-    const moved = reduceNav(searching, { type: "MOVE_FOCUS", delta: 1, maxFocus: 1 });
+    const moved = reduceNav(searching, { type: "MOVE_CATALOG_CURSOR", delta: 1, filteredCount: 2, pageSize: 6 });
     const screen = moved.stack.at(-1);
     const filtered = filterCatalogRows(catalogRows, "research");
     const highlighted = pageRows(filtered, screen?.kind === "catalog" ? screen.page : 0)[screen?.kind === "catalog" ? screen.focus : 0];
@@ -116,6 +118,31 @@ describe("Agent Suite catalog", () => {
     expect(infoActionKeys(internal)).toEqual(["Cambiar modelo y esfuerzo", "Restaurar valores base", "Desactivar (requiere anulación avanzada)", "Volver"]);
     expect(infoActionKeys(custom)).toEqual(["Cambiar modelo y esfuerzo", "Volver"]);
     expect(agentInfoActions(builtIn)[1]).toBe("Restaurar valores base");
+  });
+
+  it("coalesces canonical and legacy GitHub runtime metadata into one canonical catalog row", () => {
+    const catalog = buildSuiteDeAgentesCatalog(
+      {
+        "agent-especialit-github": { model: "openai/legacy", description: "Legacy description" },
+        "agent-github": { model: "openai/canonical" },
+      },
+      {},
+      ["agent-especialit-github", "agent-github"],
+      { "agent-especialit-github": "openai/legacy-assignment", "agent-github": "openai/canonical-assignment" },
+      {},
+      { "agent-especialit-github": { operations: "Legacy operation" }, "agent-github": { description: "Canonical description" } },
+    );
+
+    expect(catalog.filter((row) => row.id === "agent-github")).toEqual([expect.objectContaining({
+      id: "agent-github",
+      model: "openai/canonical-assignment",
+      description: "Canonical description",
+      operations: "Legacy operation",
+    })]);
+    const github = catalog.find((row) => row.id === "agent-github")!;
+    expect(catalogRowLabel(github)).toBe("agent-github");
+    expect(formatAgentInfo(github).join("\n")).toContain("agent-github");
+    expect(JSON.stringify(catalog)).not.toContain("agent-especialit-github");
   });
 
   it("leaves submit to the focused input and lets Escape/arrows reclaim catalog ownership", () => {

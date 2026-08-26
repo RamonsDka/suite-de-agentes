@@ -81,8 +81,8 @@ describe("namespace persistence", () => {
     const path = suitePath();
     const initial = {
       ...minimal,
-      modelAssignments: { general: "openai/old", "agent-especialit-github": "openai/keep" },
-      variantAssignments: { general: "high", "agent-especialit-github": "medium" },
+      modelAssignments: { general: "openai/old", "agent-github": "openai/keep" },
+      variantAssignments: { general: "high", "agent-github": "medium" },
     };
     saveSuiteConfig(path, initial);
 
@@ -90,9 +90,9 @@ describe("namespace persistence", () => {
 
     expect(loadSuiteConfig(path).modelAssignments).toEqual({
       general: "openai/new",
-      "agent-especialit-github": "openai/keep",
+      "agent-github": "openai/keep",
     });
-    expect(loadSuiteConfig(path).variantAssignments).toEqual({ "agent-especialit-github": "medium" });
+    expect(loadSuiteConfig(path).variantAssignments).toEqual({ "agent-github": "medium" });
   });
 
   it("normalizes legacy base overrides to built-in overrides on atomic save while preserving v1", () => {
@@ -112,5 +112,29 @@ describe("namespace persistence", () => {
     };
     expect(loadSuiteConfig(path)).toEqual(normalized);
     expect(JSON.parse(readFileSync(path, "utf8"))).toEqual(normalized);
+  });
+
+  it("persists a canonical GitHub identity idempotently while ignoring malformed legacy fields", () => {
+    const path = suitePath();
+    const legacy = {
+      ...minimal,
+      modelAssignments: { "agent-especialit-github": "openai/legacy", "agent-github": "openai/canonical" },
+      builtInOverrides: {
+        "agent-especialit-github": { skills: "malformed legacy fragment" },
+        "agent-github": { operations: "Canonical operation" },
+      },
+      disabledAgents: ["agent-especialit-github"],
+    };
+
+    saveSuiteConfig(path, legacy);
+    const firstBytes = readFileSync(path, "utf8");
+    saveSuiteConfig(path, loadSuiteConfig(path));
+
+    expect(loadSuiteConfig(path)).toMatchObject({
+      modelAssignments: { "agent-github": "openai/canonical" },
+      builtInOverrides: { "agent-github": { operations: "Canonical operation" } },
+      disabledAgents: ["agent-github"],
+    });
+    expect(readFileSync(path, "utf8")).toBe(firstBytes);
   });
 });

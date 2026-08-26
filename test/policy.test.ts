@@ -5,8 +5,12 @@ import {
   INTERNAL_AGENT_ALLOWLIST,
   isAuthorizedInternalAgent,
   SDD_AGENT_ALLOWLIST,
+  createInternalMemoryAudit,
+  decideInternalCommand,
+  internalAgentPermissions,
   transformTaskPermission,
 } from "../src/core/policy.ts";
+import { CANONICAL_BUILT_IN_AGENTS, GITHUB_AGENT_ID } from "../src/core/built-in-agents.ts";
 
 const CONFIGURED_INTERNAL_AGENTS = [
   "sdd-init", "sdd-explore", "sdd-onboard", "sdd-propose", "sdd-spec",
@@ -52,6 +56,14 @@ describe("task policy", () => {
     expect(decideTaskGate({ sessionAgent: "unknown", target: "explore", sessionID: "s", messageID: "m", ledger, knownAgents: ["general", "explore"] }).allowed).toBe(false);
   });
 
+  it("shares one session grant between the legacy GitHub alias and canonical identity", () => {
+    const ledger = new ConsentLedger();
+    ledger.grant({ sessionID: "s", requester: "general", target: "agent-github", purpose: "review", operation: "task" });
+    expect(decideTaskGate({ sessionAgent: "general", target: "agent-especialit-github", sessionID: "s", messageID: "m", ledger, knownAgents: ["general", "agent-github"] })).toMatchObject({ allowed: true });
+    expect(ledger.list("s")).toHaveLength(1);
+    expect(decideTaskGate({ sessionAgent: "general", target: "agent-especialit-github", sessionID: "missing", messageID: "m", knownAgents: ["general", "agent-github"] }).reason).not.toContain("agent-especialit-github");
+  });
+
   it("lists visible grant details and denies grants after revocation or session expiry", () => {
     const ledger = new ConsentLedger();
     const grant = ledger.grant({ sessionID: "s", requester: "general", target: "explore", purpose: "codebase search", operation: "task" });
@@ -90,5 +102,34 @@ describe("task policy", () => {
       "sdd-init", "sdd-explore", "sdd-onboard", "sdd-propose", "sdd-spec",
       "sdd-design", "sdd-tasks", "sdd-apply", "sdd-verify", "sdd-archive",
     ]);
+  });
+
+  it("curates eight distinct agents and binds GitHub only to installed secure workflows", () => {
+    expect(CANONICAL_BUILT_IN_AGENTS).toHaveLength(8);
+    const github = CANONICAL_BUILT_IN_AGENTS.find((agent) => agent.id === GITHUB_AGENT_ID)!;
+    expect(github.displayName).toBe("agent-github");
+    expect(github.baseline.skills).toEqual(["github-review-orchestration", "issue-creation", "branch-pr", "chained-pr"]);
+    expect(new Set(github.baseline.skills).size).toBe(github.baseline.skills.length);
+    expect(github.baseline.operations).toMatch(/SHA/i);
+    expect(github.baseline.operations).toMatch(/no realiza push autónomo/i);
+    expect(new Set(CANONICAL_BUILT_IN_AGENTS.map((agent) => agent.baseline.description)).size).toBe(8);
+  });
+
+  it("allows internal memory/read-only work while denying edits, delegation, and unsafe command shapes", async () => {
+    expect(internalAgentPermissions("compaction")).toMatchObject({ read: "allow", edit: "deny", task: "deny", bash: "deny" });
+    for (const command of ["git status", "git diff --cached", "git log -1", "git show HEAD", "git branch --show-current"]) {
+      expect(decideInternalCommand("title", command)).toMatchObject({ allowed: true });
+    }
+    for (const command of ["git -C other status", "git commit -a", "git commit --allow-empty -m x", "git push", "git push -u origin main", "git push origin HEAD:main", "gh pr create --head branch", "TOKEN=x gh pr list", "git status && git log", "git status > out"]) {
+      expect(decideInternalCommand("summary", command)).toMatchObject({ allowed: false });
+    }
+
+    const captured: string[] = [];
+    const audit = createInternalMemoryAudit(async (entry) => { captured.push(entry.content); });
+    await expect(audit.capture("session", "compaction", "same content")).resolves.toEqual({ status: "captured" });
+    await expect(audit.capture("session", "compaction", "same content")).resolves.toEqual({ status: "duplicate" });
+    const unavailable = createInternalMemoryAudit(async () => { throw new Error("offline"); });
+    await expect(unavailable.capture("session", "summary", "new content")).resolves.toEqual({ status: "unavailable" });
+    expect(captured).toEqual(["same content"]);
   });
 });
