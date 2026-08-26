@@ -1,23 +1,84 @@
 # Suite de Agentes
 
-`opencode-agent-suite` is an independent OpenCode plugin that exposes a scoped agent catalog, model-and-effort assignment, and per-turn consent controls. The visible product name is **Suite de Agentes**.
+[![version](https://img.shields.io/badge/version-1.0.1-blue.svg)](package.json)
+[![node](https://img.shields.io/badge/node-%3E%3D24%20%3C25-brightgreen.svg)](package.json)
+[![opencode](https://img.shields.io/badge/opencode-%3E%3D1.18.5-blueviolet.svg)](package.json)
+[![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-## Quick start
+**Suite de Agentes** (`opencode-agent-suite`) is an independent OpenCode plugin providing a native OpenTUI agent catalog, per-agent AI model and effort assignment, and strict per-turn consent controls for multi-agent workflows.
 
-This package is not published to npm. Build it from this checkout:
+---
 
+## Why Suite de Agentes?
+
+When running complex AI agent workflows, managing model assignments and maintaining strict security boundaries can be challenging. Suite de Agentes solves these challenges by providing:
+
+- **Centralized Agent Catalog**: A fast, keyboard-driven OpenTUI interface to inspect registered built-in and custom agents, their skills, and operational prompts.
+- **Dynamic Model & Effort Assignment**: Change providers, models, and reasoning effort tiers per agent directly from the terminal without manual JSON editing.
+- **Strict Security & Per-Turn Consent**: Prevents unauthorized sub-agent execution by enforcing an explicit allowlist for internal orchestrators and requiring per-turn user consent for external or custom agents.
+- **Clean Sibling Architecture**: Decoupled from internal orchestrator lifecycles, ensuring lightweight execution and safe fallback.
+
+---
+
+## Visual Tour
+
+Explore the OpenTUI interface directly inside OpenCode:
+
+### 1. Agent Catalog (`Catálogo`)
+Browse, search, and navigate across all available seed and custom agents.
+
+![Agent Catalog Overview](docs/images/catalog-overview.png)
+*Figure 1: Fast, searchable agent catalog with real-time filtering, pagination, and continuous arrow navigation.*
+
+### 2. Agent Details & Configuration
+Inspect agent status, capabilities, and assignment options.
+
+![Agent Details](docs/images/agent-details.png)
+*Figure 2: Comprehensive agent details showing membership, operational status, and management actions.*
+
+### 3. Model, Skills, and Prompt Directives
+View assigned reasoning models, registered skills, and operation instructions.
+
+![Agent Capabilities & Prompt](docs/images/agent-model-skills.png)
+*Figure 3: Detailed view of model configuration, effort level, registered skills, and prompt instructions.*
+
+### 4. Interactive Provider & Model Selection
+Assign AI providers and models discovered directly from the active OpenCode runtime.
+
+![AI Provider Selection](docs/images/provider-selection.png)
+*Figure 4: Select an active AI provider, model, and effort tier in a few keystrokes.*
+
+---
+
+## Key Features
+
+- **Native OpenTUI Terminal Interface**: Built with Solid and OpenTUI for smooth, zero-latency rendering.
+- **Continuous Keyboard Navigation**: Arrow keys (`↑` / `↓`) navigate continuously across page boundaries; `PageUp` / `PageDown` switch pages; `/` jumps straight to search.
+- **Runtime Provider Discovery**: Reads available AI models directly from OpenCode runtime state.
+- **Isolated Atomic Persistence**: Stores configurations in `~/.config/opencode/agent-suite/suites.json` with restricted permissions (`0600`) and atomic temporary-file replacement.
+- **Hardened Task Permissions**: Applies `*` deny policy with exact allowlists for internal orchestration agents (`sdd-*`, `review-*`, `jd-*`).
+- **Session Consent Ledger**: Tracks per-turn user authorization grants (`usa también agente: <agent-id>`) that fail closed and never leak across turns.
+
+---
+
+## Quick Start
+
+This package is designed as a local OpenCode plugin.
+
+### 1. Build from Source
 ```sh
 npm install
 npm run build
 ```
 
-Add the server entry to `opencode.json` and the TUI entry to `tui.json`:
+### 2. Configure OpenCode
+Add the server entry to your `opencode.json` and the TUI entry to `tui.json`:
 
 ```json
 // ~/.config/opencode/opencode.json
 {
   "plugin": [
-    "C:\\path\\to\\suite-de-agentes\\dist\\server.js"
+    "/path/to/suite-de-agentes/dist/server.js"
   ]
 }
 ```
@@ -26,118 +87,92 @@ Add the server entry to `opencode.json` and the TUI entry to `tui.json`:
 // ~/.config/opencode/tui.json
 {
   "plugin": [
-    "C:\\path\\to\\suite-de-agentes\\dist\\tui.js"
+    "/path/to/suite-de-agentes/dist/tui.js"
   ]
 }
 ```
 
-Use absolute paths as shown; this matches the local TUI plugin installation used by OpenCode 1.18.5. The package exports are also available as `.`/`./server` for `dist/server.js` and `./tui` for `dist/tui.js` when a local package spec is supported by the host. Restart OpenCode, then press **Alt+S**, use `/agent-suite`, or select Suite de Agentes from the command palette.
+*(On Windows, use absolute paths like `C:\\path\\to\\suite-de-agentes\\dist\\server.js`.)*
 
-Suite de Agentes opens directly on the native, searchable OpenTUI catalog. Each row opens the existing Spanish detail layout for identity, status, description, skills, operations, model, and effort.
+### 3. Launch Suite de Agentes
+Restart OpenCode, then open the interface with any of the following:
+- Press **`Alt+S`**
+- Run **`/agent-suite`** in the chat prompt
+- Select **Suite de Agentes** from the command palette
 
-The catalog UI is intentionally read-only except for one focused assignment flow:
+For detailed platform setup, see the [Local Installation Guide](docs/local-install.md).
 
-1. Choose **Cambiar modelo y esfuerzo** from an agent's details.
-2. Select a provider.
-3. Select one of that provider's models.
-4. Select an effort level supported by that model.
+---
 
-Agent creation and all other definition changes are owned by the external orchestrator. Reopening or refreshing Suite de Agentes reloads persisted configuration so externally integrated agents appear in the catalog. The sidebar and dialog titles show the plugin version (`v1.0.1`).
+## Keyboard Navigation Reference
 
-Exact Windows and POSIX examples are in [`docs/local-install.md`](docs/local-install.md).
+| Key | Context | Action |
+|---|---|---|
+| `Alt+S` | Global | Toggle Suite de Agentes |
+| `/agent-suite` | Chat prompt | Open Suite de Agentes |
+| `↑` / `↓` (or `←` / `→`) | Catalog | Move selection continuously across pages |
+| `PageUp` / `PageDown` | Catalog | Move one page backward / forward |
+| `/` | Catalog | Focus search input field |
+| `Enter` | Catalog | Open details for the selected agent |
+| `g` | Catalog | View active session grants |
+| `Esc` | Search focused | Return focus to catalog results |
+| `Esc` | Catalog | Close Suite de Agentes |
+| `Esc` | Details / Sub-screen | Return to previous view |
+| `F10` | Catalog | Quick exit to OpenCode |
 
-## What it manages
+For a complete walkthrough of all interface screens and workflows, see the [UI & Interaction Guide](docs/ui-guide.md).
 
-- The owned catalog contains `general`, `agent-especialit-github`, and externally managed custom agents.
-- Runtime agents outside that allowlist—including `sdd-*`, `review-*`, `jd-*`, `*-fallback`, `gentle-orchestrator`, and unrelated IDs—never become catalog members.
-- A member absent from the current runtime is shown as unavailable/not materialized instead of being replaced by another runtime agent.
-- The runtime model catalog is read from OpenCode state; the plugin does not invent providers or models.
-- Custom agents have an ID, description, model, prompt, permissions, and associated skills; the catalog displays those values without editing them.
-- The Suite UI changes only model and effort. It has no built-in AI, interview, or skill-ingestion flow; creation, skills, operations, permissions, lifecycle, and agent-definition edits are performed externally.
-- Host failures disable only the optional UI surface; the host-compatible fallback keeps registration and catalog access safe.
+---
 
-## Consent per turn
+## Security & Consent Model
 
-When the active session agent is `gentle-orchestrator`, the plugin permanently authorizes only the exact internal Gentle-AI system allowlist: every configured primary and fallback `sdd-*` agent, every configured review lens and `review-refuter` pair, and every configured Judgment Day judge/fix pair. This is an explicit name allowlist, not a prefix rule; a name such as `sdd-evil` is not internal. `general`, built-in `explore`, `agent-especialit-github`, and externally managed custom agents remain user agents and require an exact current-message grant:
+When `gentle-orchestrator` is the active session agent:
+1. **Internal Allowlist**: Internal system agents (`sdd-*`, `review-*`, `jd-*`) are permanently authorized to execute tasks.
+2. **Explicit User Consent**: User agents (`general`, `agent-github`, custom agents) require an explicit, current-turn consent line:
+   ```text
+   usa también agente: agent-github
+   ```
+3. **Fail-Closed Verification**: Grants are bound to the specific `sessionID` and message ID. They do not persist across turns and cannot be granted via static configuration or prompt injection.
+4. **Runtime Hardening**: The server `config` hook applies `transformTaskPermission()` to restrict task execution to authorized targets.
 
-```text
-usa también agente: github-specialist
-```
+For complete architectural details and security boundaries, see [Architecture Documentation](docs/architecture.md).
 
-`@github-specialist` is accepted only when OpenCode has already produced an unambiguous AgentPart. Grants are keyed by `sessionID` and message ID, are never carried to a later turn, and fail closed for ambiguity or negation. OpenCode 1.18.5 supplies the current message ID through `chat.message` (or its output message), not through `tool.execute.before`; the adapter therefore keeps only the latest real message mapping per session and rejects tasks when that mapping is absent. The gate runs in `tool.execute.before` for `task`; prompts, `always` permissions, and the TUI are not authority. `delegate` is not granted by this plugin because OpenCode does not expose a stable target contract for it in this version.
+---
 
-For a registered canonical text grant, the server hook appends a valid OpenCode `AgentPart` (`prt_*`, current `sessionID`/`messageID`, exact `name`, and source span). OpenCode's `SessionPrompt` uses that part to set `bypassAgentCheck` for the turn, so the static task deny does not block the explicitly granted agent. The server hook still checks every `subagent_type` before TaskTool runs, so an AgentPart for A cannot authorize B. Unknown text never creates an AgentPart; plain `@agent` text is not a grant unless OpenCode itself supplied the native AgentPart.
+## Documentation Map
 
-The internal allowlist currently contains these exact names:
+- **[UI & Interaction Guide](docs/ui-guide.md)**: Visual walkthrough, screen breakdowns, and interaction patterns.
+- **[Local Installation Guide](docs/local-install.md)**: Windows (PowerShell) and POSIX installation steps and configuration examples.
+- **[Architecture & Trust Model](docs/architecture.md)**: Deep dive into module boundaries, consent verification, and persistence.
+- **[Project Status](docs/PROJECT-STATUS.md)**: Product boundaries, workstream history, and verification records.
+- **[Contributing Guide](CONTRIBUTING.md)**: Issue-first workflow, commit standards, and local development gates.
 
-```text
-sdd-init, sdd-explore, sdd-onboard, sdd-propose, sdd-spec,
-sdd-design, sdd-tasks, sdd-apply, sdd-verify, sdd-archive,
-sdd-init-fallback, sdd-explore-fallback, sdd-onboard-fallback,
-sdd-propose-fallback, sdd-spec-fallback, sdd-design-fallback,
-sdd-tasks-fallback, sdd-apply-fallback, sdd-verify-fallback,
-sdd-archive-fallback,
-review-readability, review-readability-fallback, review-refuter,
-review-refuter-fallback, review-reliability, review-reliability-fallback,
-review-resilience, review-resilience-fallback, review-risk,
-review-risk-fallback,
-jd-fix-agent, jd-fix-agent-fallback, jd-judge-a, jd-judge-a-fallback,
-jd-judge-b, jd-judge-b-fallback
-```
+---
 
-The server policy is scoped to `gentle-orchestrator`; other session agents are not changed by the plugin.
-
-## Private registry and files
-
-The private registry defaults to:
-
-```text
-~/.config/opencode/agent-suite/suites.json
-```
-
-The persisted shape includes `version`, `customAgents`, `modelAssignments`, and `variantAssignments`, with optional base overrides and disabled-agent state. A legacy `coordinator` field is retained only as opaque compatibility data; it is not a current UI or controller feature. Writes are validated, mode `0600`, temporary-file plus rename atomic, and do not edit global OpenCode configuration. An empty legacy registry is replaced only by a successful write; real legacy assignments are rejected visibly in Spanish and left untouched. Global custom agents, when explicitly confirmed, are written as markdown under:
-
-```text
-~/.config/opencode/agent/<agent-id>.md
-```
-
-IDs are lowercase kebab-case and path traversal is rejected. Existing global files are replaced only after confirmation by the caller.
-
-## Recommended task permission hardening
-
-The exported `transformTaskPermission()` returns the documented policy shape: `*` deny, exact internal agents allow, and `general`/other agents deny. The server plugin applies that exact map in its runtime `config` hook both to the top-level task permissions and, when present, to `agent["gentle-orchestrator"].permission.task`—the per-agent map that takes precedence in OpenCode. Stale task rules are replaced while unrelated configuration and permission fields are preserved; a missing orchestrator entry is not invented. Installation and tests do not modify the user's real configuration or global files.
-
-## Compatibility
-
-- OpenCode `1.18.5+`
-- Node `24.x` (the development environment used Node `24.14.0`)
-- ESM, strict TypeScript, tsup, Vitest, OpenTUI/Solid
-
-The TUI uses the OpenTUI/Solid plugin shape used by the MIT reference plugin, with separate server and TUI entries. It is not a fork of `sdd-engram-plugin`, shares no SDD state, and does not activate or modify SDD profiles.
-
-## Security and rollback
-
-Back up `~/.config/opencode/agent-suite/` before manual changes. To roll back, remove the plugin entries, restore the suite JSON backup, and remove only markdown files created by Suite de Agentes. The plugin never changes `~/.config/opencode` during installation, tests, or build.
-
-## Troubleshooting
-
-- **A task is blocked:** add the exact Spanish consent line to the current user message. Do not rely on a previous turn or a task prompt.
-- **The TUI is absent:** verify that `opencode-agent-suite/tui` is installed and restart OpenCode. An incompatible renderer is intentionally disabled safely.
-- **A model is missing:** refresh/restart OpenCode so the plugin can read the current provider state.
-- **Global materialization is refused:** provide an explicit confirmation and verify the ID is lowercase kebab-case.
-- **Config validation fails:** inspect `suites.json`; unknown shapes and non-empty legacy assignments are rejected instead of silently repaired.
-
-## Development
+## Development & Testing
 
 ```sh
+# Install dependencies
 npm install
+
+# Run unit and integration tests
 npm test
+
+# Run strict TypeScript checks
 npm run typecheck
+
+# Build bundle
 npm run build
 ```
 
-See [`docs/architecture.md`](docs/architecture.md) and [`docs/local-install.md`](docs/local-install.md).
+---
 
-## Project status
+## Contributing
 
-See [docs/PROJECT-STATUS.md](docs/PROJECT-STATUS.md) for the current product boundary, preserved workstreams, migration status, and recommended resumption point.
+We welcome contributions! Please review our [Contributing Guide](CONTRIBUTING.md) before submitting pull requests. All changes must originate from an approved GitHub issue.
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).

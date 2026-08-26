@@ -1,14 +1,11 @@
-# Built-In Agent Management Specification
+# Delta for built-in-agent-management
 
-## Purpose
-
-Provide structured classification, configuration, protected deactivation, baseline restoration, and safe discovery for OpenCode built-in agents.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Canonical Built-In Agent Registry and Presentation
 
 The system MUST manage seven built-ins `general`, `build`, `plan`, `explore`, `compaction`, `title`, `summary` plus seed `agent-github` (canonical ID and exact visible label `agent-github`). It MUST preserve lowercase IDs; seven displays MUST be capitalized (`General`, `Build`, `Plan`, `Explore`, `Compaction`, `Title`, `Summary`) and GitHub display MUST be exactly `agent-github`. Legacy `agent-especialit-github` MUST be input-only and MUST NOT appear in detail screens, diagnostics, or newly created filenames/content. Each of eight MUST provide editable Spanish descriptions, operations, model, effort, skill assignments. All eight MUST have accurate non-duplicative metadata; `agent-github` MUST bind `github-review-orchestration`, `issue-creation`, `branch-pr`, `chained-pr` with least-privilege/SHA-pinning guidance, and MUST NOT claim push.
+(Previously: seven agents only, without eight-agent accuracy; display was `Agent-Github`.)
 
 **User Story:** As user, I want metadata tied to installed skills.
 
@@ -42,46 +39,7 @@ The system MUST manage seven built-ins `general`, `build`, `plan`, `explore`, `c
 - WHEN new file materialized or diagnostic rendered
 - THEN filename, content, diagnostic contain only `agent-github`; zero legacy
 
-### Requirement: Internal Agent Protection and Advanced Override
-
-The system MUST classify `compaction`, `title`, and `summary` as internal system agents, and `general`, `build`, `plan`, and `explore` as subagents. The system MUST require an explicit advanced override confirmation before allowing deactivation of internal agents.
-
-#### Acceptance & Edge Case Checklist
-- [ ] Classifies `compaction`, `title`, and `summary` as internal system agents.
-- [ ] Blocks disabling internal agents without advanced override confirmation.
-- [ ] Allows disabling standard subagents without advanced override.
-
-#### Scenario: Attempt disabling internal agent without override
-- GIVEN `compaction` is enabled and advanced override is inactive
-- WHEN the user attempts to disable `compaction`
-- THEN the system prompts for advanced override confirmation and remains enabled if canceled
-
-### Requirement: Per-Agent Baseline Restoration
-
-The system MUST provide a per-agent restore action that resets an edited built-in agent back to its curated baseline metadata, model, effort, operations, and skills.
-
-#### Acceptance & Edge Case Checklist
-- [ ] Restores curated baseline fields for the target agent only.
-- [ ] Leaves other built-in and custom agents unchanged.
-
-#### Scenario: Restore modified agent to baseline
-- GIVEN `explore` has customized model and operation settings
-- WHEN the user invokes baseline restoration for `explore`
-- THEN `explore` resets to its original curated baseline values
-
-### Requirement: Future Built-In Discovery and Curation
-
-The system MUST automatically discover unclassified OpenCode built-in agents, assigning generic Spanish metadata, a pending-curation marker, and conservative warnings without making uncurated capability claims.
-
-#### Acceptance & Edge Case Checklist
-- [ ] Discovers new runtime built-ins not in the canonical registry.
-- [ ] Flags them as pending curation with generic Spanish metadata.
-- [ ] Shows warnings and avoids false role or permission claims.
-
-#### Scenario: Discovered new built-in agent
-- GIVEN runtime introduces a new built-in agent `indexer`
-- WHEN the runtime inventory is synchronized
-- THEN `indexer` is registered with pending curation status and generic Spanish metadata
+## ADDED Requirements
 
 ### Requirement: Customization-Preserving Baseline Update
 
