@@ -2,7 +2,7 @@ import type { JSX } from "@opentui/solid";
 import type { TuiTheme } from "@opencode-ai/plugin/tui";
 import type { AgentCatalogRow } from "../../core/types.ts";
 import { getBuiltInDefinition, isInternalBuiltInAgent } from "../../core/built-in-agents.ts";
-import { agentInfoSections, Divider, FieldRow, SectionPanel, SelectableRow, StatusBadge, type AgentInfoSection, type StatusBadgeProps } from "../visual-primitives.tsx";
+import { agentInfoSections, Divider, FIELD_ROW_VALUE_CONTAINER_LAYOUT, FIELD_ROW_VALUE_TEXT_LAYOUT, FIELD_ROW_WRAPPED_LAYOUT, FieldRow, SectionPanel, SelectableRow, StatusBadge, type AgentInfoSection, type StatusBadgeProps } from "../visual-primitives.tsx";
 
 export interface AgentInfoProps {
   theme: TuiTheme;
@@ -18,7 +18,11 @@ export interface AgentInfoProps {
 export const AGENT_INFO_LAYOUT = { flexGrow: 1, flexShrink: 1, minWidth: 0, minHeight: 0, justifyContent: "center" as const, alignItems: "center" as const };
 export const AGENT_INFO_CONTENT_LAYOUT = { width: "100%" as const, height: "100%" as const, flexShrink: 1, minWidth: 0, minHeight: 0, gap: 1 };
 export const AGENT_INFO_DETAIL_LAYOUT = { flexGrow: 1, flexShrink: 1, minWidth: 0, minHeight: 0, gap: 1, overflow: "scroll" as const };
+export const AGENT_INFO_SCROLL_CONTENT_LAYOUT = { width: "100%" as const, minWidth: 0, flexShrink: 1, paddingLeft: 2, paddingRight: 2, gap: 1 };
 export const AGENT_INFO_ACTIONS_LAYOUT = { flexShrink: 0, minWidth: 0 };
+export const AGENT_INFO_FIELD_LAYOUT = FIELD_ROW_WRAPPED_LAYOUT;
+export const AGENT_INFO_FIELD_VALUE_LAYOUT = FIELD_ROW_VALUE_CONTAINER_LAYOUT;
+export const AGENT_INFO_FIELD_TEXT_LAYOUT = FIELD_ROW_VALUE_TEXT_LAYOUT;
 
 export function agentInfoDisplaySections(row: AgentCatalogRow, operations?: string): readonly AgentInfoSection[] {
   return agentInfoSections(row, operations);
@@ -63,13 +67,19 @@ export function AgentInfo(props: AgentInfoProps): JSX.Element {
     <box {...AGENT_INFO_LAYOUT} flexDirection="column">
       <box {...AGENT_INFO_CONTENT_LAYOUT} flexDirection="column">
         <scrollbox {...AGENT_INFO_DETAIL_LAYOUT}>
-          {agentInfoDisplaySections(props.row, props.operations).map((section) => (
-            <SectionPanel theme={props.theme} title={section.title}>
-              {section.fields.map(([label, value]) => label === "Estado"
-                ? <box flexDirection="row"><text fg={props.theme.current.textMuted}>{label}: </text><StatusBadge theme={props.theme} status={agentInfoStatus(props.row)}>{value}</StatusBadge></box>
-                : <FieldRow theme={props.theme} label={label} value={value} wrap />)}
-            </SectionPanel>
-          ))}
+          <box {...AGENT_INFO_SCROLL_CONTENT_LAYOUT} flexDirection="column">
+            {agentInfoDisplaySections(props.row, props.operations).map((section) => (
+              <SectionPanel theme={props.theme} title={section.title}>
+                {section.fields.map(([label, value]) => label === "Estado"
+                  ? (
+                    <FieldRow theme={props.theme} label={label} wrap>
+                      <StatusBadge theme={props.theme} status={agentInfoStatus(props.row)}>{value}</StatusBadge>
+                    </FieldRow>
+                  )
+                  : <FieldRow theme={props.theme} label={label} value={value} wrap />)}
+              </SectionPanel>
+            ))}
+          </box>
         </scrollbox>
         <Divider theme={props.theme} />
         <box {...AGENT_INFO_ACTIONS_LAYOUT} flexDirection="column">

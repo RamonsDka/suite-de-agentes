@@ -13,6 +13,7 @@ import {
   providerSelectionOptions,
   type RuntimeModelProvider,
 } from "../src/tui/screens/model-select.tsx";
+import { buildSuiteDeAgentesCatalog } from "../src/core/suites.ts";
 
 const providers: readonly RuntimeModelProvider[] = [
   {
@@ -36,6 +37,31 @@ describe("catalog-only agent suite mode", () => {
   it("opens directly on the catalog and exposes only read/model-assignment screens", () => {
     expect(initialNavState().stack).toEqual([{ kind: "catalog", page: 0, focus: 0, query: "", searchFocused: false }]);
     expect(CATALOG_ONLY_SCREEN_KINDS).toEqual(["catalog", "info", "provider", "model", "effort"]);
+    expect(initialNavState().stack[0]?.kind).not.toBe("landing");
+  });
+
+  it("populates the catalog with all required built-in agents and configured agents with metadata", () => {
+    const catalog = buildSuiteDeAgentesCatalog(
+      {},
+      {
+        "agent-notebooklm": {
+          id: "agent-notebooklm",
+          description: "NotebookLM specialist for research workflows",
+          skills: ["notebooklm", "notebooklm-library-curator"],
+          prompt: "Drive NotebookLM workflows safely.",
+          model: "anthropic/claude-3-5-sonnet",
+          permissions: {},
+        },
+      }
+    );
+
+    const ids = catalog.map((r) => r.id);
+    for (const required of ["build", "plan", "general", "explore", "compaction", "title", "summary", "agent-github", "agent-notebooklm"]) {
+      expect(ids, `Catalog must contain agent '${required}'`).toContain(required);
+      const row = catalog.find((r) => r.id === required)!;
+      expect(row.description, `Agent '${required}' must have a description`).toBeDefined();
+      expect(row.description!.length).toBeGreaterThan(0);
+    }
   });
 
   it("keeps agent details read-only with one assignment action", () => {

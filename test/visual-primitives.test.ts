@@ -1,7 +1,7 @@
 import { RGBA } from "@opentui/core";
 import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui";
 import { describe, expect, it, vi } from "vitest";
-import { agentInfoSections, createSafeMouseActivation, currentValueCue, keyHintPresentation, screenKeyHints, screenKeyHintsForScreen, searchInputPresentation, selectableRowPresentation } from "../src/tui/visual-primitives.tsx";
+import { agentInfoSections, createSafeMouseActivation, currentValueCue, FIELD_ROW_INLINE_LAYOUT, FIELD_ROW_VALUE_CONTAINER_LAYOUT, FIELD_ROW_VALUE_TEXT_LAYOUT, FIELD_ROW_WRAPPED_LAYOUT, keyHintPresentation, screenKeyHints, screenKeyHintsForScreen, searchInputPresentation, selectableRowPresentation } from "../src/tui/visual-primitives.tsx";
 import { SUITE_SHELL_LAYOUT } from "../src/tui/screens/suite-shell.tsx";
 
 const row = {
@@ -18,6 +18,29 @@ const current = {
 } as TuiThemeCurrent;
 
 describe("visual primitives", () => {
+  it("exports field row layout contracts for wrapped multiline fields with inner margin", () => {
+    expect(FIELD_ROW_WRAPPED_LAYOUT).toEqual({
+      flexDirection: "column",
+      minWidth: 0,
+      flexShrink: 1,
+    });
+    expect(FIELD_ROW_INLINE_LAYOUT).toEqual({
+      flexDirection: "row",
+      minWidth: 0,
+      flexShrink: 1,
+    });
+    expect(FIELD_ROW_VALUE_CONTAINER_LAYOUT).toEqual({
+      paddingLeft: 1,
+      minWidth: 0,
+      flexShrink: 1,
+    });
+    expect(FIELD_ROW_VALUE_TEXT_LAYOUT).toEqual({
+      wrapMode: "word",
+      minWidth: 0,
+      flexShrink: 1,
+    });
+  });
+
   it("presents selected rows with a marker and host accent colors", () => {
     expect(selectableRowPresentation({ current } as never, true)).toMatchObject({
       marker: "► ", background: current.accent, foreground: current.selectedListItemText, border: current.borderActive,

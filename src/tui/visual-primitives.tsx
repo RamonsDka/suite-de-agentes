@@ -140,19 +140,48 @@ export interface SectionPanelProps {
 
 export function SectionPanel(props: SectionPanelProps): JSX.Element {
   const tokens = () => createVisualTokens(props.theme.current);
-  return <box flexDirection="column" backgroundColor={tokens().surface.panel} borderStyle="single" borderColor={tokens().indicator} padding={1} gap={1}><box justifyContent="center"><text fg={tokens().form.label} attributes={createTextAttributes({ bold: true })}>{props.title}</text></box>{props.children}</box>;
+  return <box flexDirection="column" backgroundColor={tokens().surface.panel} borderStyle="single" borderColor={tokens().indicator} padding={1} gap={1} minWidth={0} flexShrink={1}><box justifyContent="center"><text fg={tokens().form.label} attributes={createTextAttributes({ bold: true })}>{props.title}</text></box>{props.children}</box>;
 }
+
+export const FIELD_ROW_WRAPPED_LAYOUT = { flexDirection: "column" as const, minWidth: 0, flexShrink: 1 };
+export const FIELD_ROW_INLINE_LAYOUT = { flexDirection: "row" as const, minWidth: 0, flexShrink: 1 };
+export const FIELD_ROW_VALUE_CONTAINER_LAYOUT = { paddingLeft: 1, minWidth: 0, flexShrink: 1 };
+export const FIELD_ROW_VALUE_TEXT_LAYOUT = { wrapMode: "word" as const, minWidth: 0, flexShrink: 1 };
 
 export interface FieldRowProps {
   theme: TuiTheme;
   label: string;
-  value: string;
+  value?: string;
   wrap?: boolean;
+  children?: JSX.Element;
 }
 
 export function FieldRow(props: FieldRowProps): JSX.Element {
   const tokens = () => createVisualTokens(props.theme.current);
-  return <box flexDirection={props.wrap ? "column" : "row"} flexWrap={props.wrap ? "wrap" : undefined} minWidth={0}><text fg={tokens().form.label}>{props.label}: </text><text flexGrow={props.wrap ? 1 : undefined} flexShrink={props.wrap ? 1 : undefined} minWidth={props.wrap ? 0 : undefined} fg={tokens().form.value} wrapMode={props.wrap ? "word" : "none"}>{props.value}</text></box>;
+  if (props.wrap) {
+    return (
+      <box {...FIELD_ROW_WRAPPED_LAYOUT}>
+        <text fg={tokens().form.label}>{props.label}:</text>
+        <box {...FIELD_ROW_VALUE_CONTAINER_LAYOUT}>
+          {props.children ?? (
+            <text fg={tokens().form.value} {...FIELD_ROW_VALUE_TEXT_LAYOUT}>
+              {props.value}
+            </text>
+          )}
+        </box>
+      </box>
+    );
+  }
+  return (
+    <box {...FIELD_ROW_INLINE_LAYOUT}>
+      <text fg={tokens().form.label}>{props.label}: </text>
+      {props.children ?? (
+        <text fg={tokens().form.value} wrapMode="none">
+          {props.value}
+        </text>
+      )}
+    </box>
+  );
 }
 
 export interface StatusBadgeProps {
