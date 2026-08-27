@@ -1,6 +1,6 @@
 # Suite de Agentes
 
-[![version](https://img.shields.io/badge/version-1.0.1-blue.svg)](package.json)
+[![version](https://img.shields.io/badge/version-1.1.0-blue.svg)](package.json)
 [![node](https://img.shields.io/badge/node-%3E%3D24%20%3C25-brightgreen.svg)](package.json)
 [![opencode](https://img.shields.io/badge/opencode-%3E%3D1.18.5-blueviolet.svg)](package.json)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -17,6 +17,7 @@ When running complex AI agent workflows, managing model assignments and maintain
 - **Dynamic Model & Effort Assignment**: Change providers, models, and reasoning effort tiers per agent directly from the terminal without manual JSON editing.
 - **Strict Security & Per-Turn Consent**: Prevents unauthorized sub-agent execution by enforcing an explicit allowlist for internal orchestrators and requiring per-turn user consent for external or custom agents.
 - **Clean Sibling Architecture**: Decoupled from internal orchestrator lifecycles, ensuring lightweight execution and safe fallback.
+- **Portable Distribution**: Clean public distribution with zero personal agents hardcoded into the baseline; includes self-contained installation automation for Windows and POSIX.
 
 ---
 
@@ -58,44 +59,67 @@ Assign AI providers and models discovered directly from the active OpenCode runt
 - **Isolated Atomic Persistence**: Stores configurations in `~/.config/opencode/agent-suite/suites.json` with restricted permissions (`0600`) and atomic temporary-file replacement.
 - **Hardened Task Permissions**: Applies `*` deny policy with exact allowlists for internal orchestration agents (`sdd-*`, `review-*`, `jd-*`).
 - **Session Consent Ledger**: Tracks per-turn user authorization grants (`usa también agente: <agent-id>`) that fail closed and never leak across turns.
+- **Clean 7 Built-In Public Baseline**: Includes strictly the standard OpenCode built-ins (`build`, `plan`, `general`, `explore`, `compaction`, `title`, `summary`). Specialist agents are opt-in user configurations.
 
 ---
 
-## Quick Start
+## Quick Start & Installation
 
-This package is designed as a local OpenCode plugin.
+### Option A: Install from GitHub Release (Recommended)
 
-### 1. Build from Source
+1. Download `suite-de-agentes-v1.1.0.zip` (Windows) or `suite-de-agentes-v1.1.0.tar.gz` (Linux/macOS) from the [Releases](https://github.com/RamonsDka/suite-de-agentes/releases) page.
+2. Extract the archive into any temporary location.
+3. Run the portable installer:
+
+**Windows (PowerShell):**
+```powershell
+Expand-Archive -Path suite-de-agentes-v1.1.0.zip -DestinationPath .\suite-installer
+Set-Location -LiteralPath .\suite-installer
+.\install.ps1
+```
+
+**Linux / macOS (Bash / Sh):**
 ```sh
-npm install
+tar -xzf suite-de-agentes-v1.1.0.tar.gz
+cd suite-de-agentes-v1.1.0
+./install.sh
+```
+
+The installer will:
+- Copy the pre-built release package into `~/.config/opencode/plugins/suite-de-agentes/`
+- Install required production runtime dependencies
+- Register server plugin in `~/.config/opencode/opencode.json`
+- Register TUI plugin in `~/.config/opencode/tui.json`
+- Preserve and backup all existing OpenCode configurations
+
+**Installer Options:**
+- `--dry-run`: Preview planned file copies and configuration changes without mutating files.
+- `--uninstall`: Remove Suite de Agentes plugin entries from OpenCode configuration.
+- `--target-dir <path>`: Specify a custom plugin installation directory.
+- `--config-dir <path>`: Specify a custom OpenCode configuration directory.
+
+---
+
+### Option B: Build from Source
+
+```sh
+# 1. Clone repository
+git clone https://github.com/RamonsDka/suite-de-agentes.git
+cd suite-de-agentes
+
+# 2. Install dependencies & build
+npm ci
 npm run build
+
+# 3. Install locally
+./install.sh   # On Windows: .\install.ps1
 ```
 
-### 2. Configure OpenCode
-Add the server entry to your `opencode.json` and the TUI entry to `tui.json`:
+---
 
-```json
-// ~/.config/opencode/opencode.json
-{
-  "plugin": [
-    "/path/to/suite-de-agentes/dist/server.js"
-  ]
-}
-```
+## Launching Suite de Agentes
 
-```json
-// ~/.config/opencode/tui.json
-{
-  "plugin": [
-    "/path/to/suite-de-agentes/dist/tui.js"
-  ]
-}
-```
-
-*(On Windows, use absolute paths like `C:\\path\\to\\suite-de-agentes\\dist\\server.js`.)*
-
-### 3. Launch Suite de Agentes
-Restart OpenCode, then open the interface with any of the following:
+After installation, restart OpenCode and open the interface using any of the following:
 - Press **`Alt+S`**
 - Run **`/agent-suite`** in the chat prompt
 - Select **Suite de Agentes** from the command palette
@@ -128,9 +152,9 @@ For a complete walkthrough of all interface screens and workflows, see the [UI &
 
 When `gentle-orchestrator` is the active session agent:
 1. **Internal Allowlist**: Internal system agents (`sdd-*`, `review-*`, `jd-*`) are permanently authorized to execute tasks.
-2. **Explicit User Consent**: User agents (`general`, `agent-github`, custom agents) require an explicit, current-turn consent line:
+2. **Explicit User Consent**: External and custom agents require an explicit, current-turn consent line:
    ```text
-   usa también agente: agent-github
+   usa también agente: <agent-id>
    ```
 3. **Fail-Closed Verification**: Grants are bound to the specific `sessionID` and message ID. They do not persist across turns and cannot be granted via static configuration or prompt injection.
 4. **Runtime Hardening**: The server `config` hook applies `transformTaskPermission()` to restrict task execution to authorized targets.
@@ -144,18 +168,17 @@ For complete architectural details and security boundaries, see [Architecture Do
 - **[UI & Interaction Guide](docs/ui-guide.md)**: Visual walkthrough, screen breakdowns, and interaction patterns.
 - **[Local Installation Guide](docs/local-install.md)**: Windows (PowerShell) and POSIX installation steps and configuration examples.
 - **[Architecture & Trust Model](docs/architecture.md)**: Deep dive into module boundaries, consent verification, and persistence.
-- **[Project Status](docs/PROJECT-STATUS.md)**: Product boundaries, workstream history, and verification records.
 - **[Contributing Guide](CONTRIBUTING.md)**: Issue-first workflow, commit standards, and local development gates.
 
 ---
 
-## Development & Testing
+## Development & Packaging
 
 ```sh
 # Install dependencies
-npm install
+npm ci
 
-# Run unit and integration tests
+# Run test suite
 npm test
 
 # Run strict TypeScript checks
@@ -163,13 +186,10 @@ npm run typecheck
 
 # Build bundle
 npm run build
+
+# Generate deterministic release archives (.zip, .tar.gz, SHA256SUMS.txt)
+npm run package
 ```
-
----
-
-## Contributing
-
-We welcome contributions! Please review our [Contributing Guide](CONTRIBUTING.md) before submitting pull requests. All changes must originate from an approved GitHub issue.
 
 ---
 
