@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -29,6 +29,11 @@ interface ArchiveFileEntry {
 }
 
 describe("packaging and release distribution", () => {
+  beforeAll(() => {
+    if (!fs.existsSync(path.join(projectRoot, "dist", "server.js"))) {
+      execFileSync("npm", ["run", "build"], { cwd: projectRoot, shell: true, stdio: "pipe" });
+    }
+  });
   it("builds a deterministic file list containing only release assets without root leakage", () => {
     const files = buildArchiveFilesList(projectRoot) as ArchiveFileEntry[];
     const relPaths = files.map((f: ArchiveFileEntry) => f.relativePath);
