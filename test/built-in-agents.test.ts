@@ -5,7 +5,7 @@ import {
 } from "../src/core/built-in-agents.ts";
 
 describe("built-in agent registry", () => {
-  it("defines eight canonical agents with lowercase runtime IDs, Spanish metadata, protected internal tiers, and canonical GitHub visibility", () => {
+  it("defines exactly seven canonical agents with lowercase runtime IDs, Spanish metadata, and zero personal agent seeds", () => {
     expect(CANONICAL_BUILT_IN_AGENTS.map((agent) => agent.id)).toEqual([
       "general",
       "build",
@@ -14,13 +14,12 @@ describe("built-in agent registry", () => {
       "compaction",
       "title",
       "summary",
-      "agent-github",
     ]);
 
-    expect(CANONICAL_BUILT_IN_AGENTS).toHaveLength(8);
-    expect(CANONICAL_BUILT_IN_AGENTS.map((agent) => agent.displayName)).toContain("agent-github");
+    expect(CANONICAL_BUILT_IN_AGENTS).toHaveLength(7);
+    expect(CANONICAL_BUILT_IN_AGENTS.map((agent) => agent.id)).not.toContain("agent-github");
+    expect(CANONICAL_BUILT_IN_AGENTS.map((agent) => agent.id)).not.toContain("agent-notebooklm");
     expect(CANONICAL_BUILT_IN_AGENTS.map((agent) => agent.id)).not.toContain("agent-especialit-github");
-    expect(CANONICAL_BUILT_IN_AGENTS.map((agent) => agent.displayName)).not.toContain("agent-especialit-github");
 
     expect(CANONICAL_BUILT_IN_AGENTS.find((agent) => agent.id === "plan")).toMatchObject({
       displayName: "Plan",
@@ -40,7 +39,7 @@ describe("built-in agent registry", () => {
       "summary",
     ]);
 
-    for (const id of ["build", "plan", "general", "explore", "compaction", "title", "summary", "agent-github"]) {
+    for (const id of ["build", "plan", "general", "explore", "compaction", "title", "summary"]) {
       const found = CANONICAL_BUILT_IN_AGENTS.find((a) => a.id === id);
       expect(found, `Built-in agent '${id}' must exist`).toBeDefined();
       expect(found!.baseline.description.length).toBeGreaterThan(0);
@@ -63,7 +62,6 @@ describe("built-in agent registry", () => {
   it("discovers only unclassified runtime built-ins as pending curation with generic Spanish warnings", () => {
     const discovered = discoverBuiltInAgents({
       indexer: { model: "opencode/indexer" },
-      "agent-especialit-github": { model: "openai/custom" },
       "gentle-orchestrator": { model: "openai/orchestrator" },
       "sdd-builder": { model: "openai/sdd" },
       "review-risk": { model: "openai/review" },

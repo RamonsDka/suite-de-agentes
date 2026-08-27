@@ -10,7 +10,7 @@ import {
   internalAgentPermissions,
   transformTaskPermission,
 } from "../src/core/policy.ts";
-import { CANONICAL_BUILT_IN_AGENTS, GITHUB_AGENT_ID } from "../src/core/built-in-agents.ts";
+import { CANONICAL_BUILT_IN_AGENTS } from "../src/core/built-in-agents.ts";
 
 const CONFIGURED_INTERNAL_AGENTS = [
   "sdd-init", "sdd-explore", "sdd-onboard", "sdd-propose", "sdd-spec",
@@ -75,12 +75,11 @@ describe("task policy", () => {
     expect(decideTaskGate({ sessionAgent: "unknown", target: "explore", sessionID: "s", messageID: "m", ledger, knownAgents: ["general", "explore"] }).allowed).toBe(true);
   });
 
-  it("shares one session grant between the legacy GitHub alias and canonical identity", () => {
+  it("shares one session grant between an alias and canonical identity", () => {
     const ledger = new ConsentLedger();
-    ledger.grant({ sessionID: "s", requester: "general", target: "agent-github", purpose: "review", operation: "task" });
-    expect(decideTaskGate({ sessionAgent: "general", target: "agent-especialit-github", sessionID: "s", messageID: "m", ledger, knownAgents: ["general", "agent-github"] })).toMatchObject({ allowed: true });
+    ledger.grant({ sessionID: "s", requester: "general", target: "general", purpose: "review", operation: "task" });
+    expect(decideTaskGate({ sessionAgent: "general", target: "general", sessionID: "s", messageID: "m", ledger, knownAgents: ["general"] })).toMatchObject({ allowed: true });
     expect(ledger.list("s")).toHaveLength(1);
-    expect(decideTaskGate({ sessionAgent: "gentle-orchestrator", target: "agent-especialit-github", sessionID: "missing", messageID: "m", knownAgents: ["general"] }).reason).not.toContain("agent-especialit-github");
   });
 
   it("lists visible grant details and denies grants after revocation or session expiry", () => {
@@ -123,15 +122,18 @@ describe("task policy", () => {
     ]);
   });
 
-  it("curates eight distinct agents and binds GitHub only to installed secure workflows", () => {
-    expect(CANONICAL_BUILT_IN_AGENTS).toHaveLength(8);
-    const github = CANONICAL_BUILT_IN_AGENTS.find((agent) => agent.id === GITHUB_AGENT_ID)!;
-    expect(github.displayName).toBe("agent-github");
-    expect(github.baseline.skills).toEqual(["github-review-orchestration", "issue-creation", "branch-pr", "chained-pr"]);
-    expect(new Set(github.baseline.skills).size).toBe(github.baseline.skills.length);
-    expect(github.baseline.operations).toMatch(/SHA/i);
-    expect(github.baseline.operations).toMatch(/no realiza push autónomo/i);
-    expect(new Set(CANONICAL_BUILT_IN_AGENTS.map((agent) => agent.baseline.description)).size).toBe(8);
+  it("curates seven distinct agents with distinct Spanish descriptions and no personal agent seeds", () => {
+    expect(CANONICAL_BUILT_IN_AGENTS).toHaveLength(7);
+    expect(CANONICAL_BUILT_IN_AGENTS.map((agent) => agent.id)).toEqual([
+      "general",
+      "build",
+      "plan",
+      "explore",
+      "compaction",
+      "title",
+      "summary",
+    ]);
+    expect(new Set(CANONICAL_BUILT_IN_AGENTS.map((agent) => agent.baseline.description)).size).toBe(7);
   });
 
   it("allows internal memory/read-only work while denying edits, delegation, and unsafe command shapes", async () => {

@@ -114,26 +114,25 @@ describe("namespace persistence", () => {
     expect(JSON.parse(readFileSync(path, "utf8"))).toEqual(normalized);
   });
 
-  it("persists a canonical GitHub identity idempotently while ignoring malformed legacy fields", () => {
+  it("persists built-in overrides idempotently", () => {
     const path = suitePath();
-    const legacy = {
+    const config = {
       ...minimal,
-      modelAssignments: { "agent-especialit-github": "openai/legacy", "agent-github": "openai/canonical" },
+      modelAssignments: { general: "openai/assigned-general", explore: "openai/assigned-explore" },
       builtInOverrides: {
-        "agent-especialit-github": { skills: "malformed legacy fragment" },
-        "agent-github": { operations: "Canonical operation" },
+        general: { operations: "Canonical operation" },
       },
-      disabledAgents: ["agent-especialit-github"],
+      disabledAgents: ["explore"],
     };
 
-    saveSuiteConfig(path, legacy);
+    saveSuiteConfig(path, config);
     const firstBytes = readFileSync(path, "utf8");
     saveSuiteConfig(path, loadSuiteConfig(path));
 
     expect(loadSuiteConfig(path)).toMatchObject({
-      modelAssignments: { "agent-github": "openai/canonical" },
-      builtInOverrides: { "agent-github": { operations: "Canonical operation" } },
-      disabledAgents: ["agent-github"],
+      modelAssignments: { general: "openai/assigned-general", explore: "openai/assigned-explore" },
+      builtInOverrides: { general: { operations: "Canonical operation" } },
+      disabledAgents: ["explore"],
     });
     expect(readFileSync(path, "utf8")).toBe(firstBytes);
   });
