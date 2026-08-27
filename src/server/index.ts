@@ -23,9 +23,13 @@ type RuntimePluginConfig = PluginConfig & {
   agent?: Record<string, RuntimeAgentConfig | undefined>;
 };
 
-function applyRuntimeTaskPermission(config: PluginConfig, disabledAgents: readonly string[] = []): void {
+function applyRuntimeTaskPermission(
+  config: PluginConfig,
+  disabledAgents: readonly string[] = [],
+  registeredAgents: readonly string[] = [],
+): void {
   const runtimeConfig = config as RuntimePluginConfig;
-  const taskPermission = transformTaskPermission(disabledAgents);
+  const taskPermission = transformTaskPermission(disabledAgents, registeredAgents);
   runtimeConfig.permission = {
     ...(runtimeConfig.permission ?? {}),
     task: taskPermission,
@@ -176,15 +180,23 @@ export const serverPlugin: Plugin = async (input) => {
   const registeredAgents = new Set<string>();
   let disabledAgents: string[] = [];
   let suiteConfigLoaded = false;
+  let suiteFileExisted = false;
   const liveDisabledAgents = () => {
     try {
       const path = defaultSuitePath();
-      if (suiteConfigLoaded && !existsSync(path)) throw new Error("Suite config is unavailable");
+      const exists = existsSync(path);
+      if (!exists) {
+        if (suiteFileExisted) throw new Error("Suite config is unavailable");
+        return disabledAgents;
+      }
       disabledAgents = [...(loadSuiteConfig(path).disabledAgents ?? [])];
       suiteConfigLoaded = true;
+      suiteFileExisted = true;
       return disabledAgents;
-    } catch {
-      throw new Error("Suite de Agentes: suite config unavailable");
+    } catch (error) {
+      if (error instanceof Error && /suite config unavailable/i.test(error.message)) throw error;
+      if (existsSync(defaultSuitePath())) throw new Error("Suite de Agentes: suite config unavailable");
+      return disabledAgents;
     }
   };
   const securityState = () => {
@@ -206,16 +218,21 @@ export const serverPlugin: Plugin = async (input) => {
       normalizeRuntimeAgentEntries(config);
       const configuredAgents = Object.keys(config.agent ?? {});
       try {
-        const suite = loadSuiteConfig(defaultSuitePath());
+        const suitePath = defaultSuitePath();
+        const suite = loadSuiteConfig(suitePath);
         disabledAgents = [...(suite.disabledAgents ?? [])];
         suiteConfigLoaded = true;
+        if (existsSync(suitePath)) suiteFileExisted = true;
         applyRuntimeDisabledAgents(config, disabledAgents);
-         applyRuntimeBuiltInOverrides(config, suite.builtInOverrides ?? {});
-        applyRuntimeTaskPermission(config, disabledAgents);
+        applyRuntimeBuiltInOverrides(config, suite.builtInOverrides ?? {});
+        applyRuntimeTaskPermission(config, disabledAgents, configuredAgents);
         applyRuntimeModelAssignments(config, suite.modelAssignments, suite.variantAssignments);
-       } catch { suiteConfigLoaded = false; applyRuntimeTaskPermission(config, disabledAgents); /* TUI reports malformed suite config. */ }
+      } catch {
+        suiteConfigLoaded = false;
+        applyRuntimeTaskPermission(config, disabledAgents, configuredAgents); /* TUI reports malformed suite config. */
+      }
       registeredAgents.clear();
-      for (const agentID of configuredAgents) registeredAgents.add(agentID);
+      for (const agentID of configuredAgents) registeredAgents.add(normalizeAgentId(agentID));
     },
   };
 };

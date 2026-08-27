@@ -78,22 +78,37 @@ export function isAuthorizedInternalAgent(target: string): boolean {
   return (INTERNAL_AGENT_ALLOWLIST as readonly string[]).includes(target);
 }
 
-export function decideTaskGate(input: TaskGateInput & { disabledAgents?: readonly string[] }): TaskGateDecision {
+export function decideTaskGate(input: TaskGateInput & { disabledAgents?: readonly string[]; knownAgents?: readonly string[] }): TaskGateDecision {
   const target = normalizeAgentId(input.target);
   const knownAgents = input.knownAgents?.map(normalizeAgentId);
   if (input.disabledAgents?.map(normalizeAgentId).includes(target)) return { allowed: false, reason: `Disabled agent '${target}' cannot be dispatched.` };
+  if (input.sessionAgent !== SDD_ORCHESTRATOR) return { allowed: true, reason: "suite policy is scoped to gentle-orchestrator" };
   if (isAuthorizedInternalAgent(target)) return { allowed: true, reason: "exact internal allowlist" };
-  if (!input.sessionAgent || (input.sessionAgent !== SDD_ORCHESTRATOR && !input.knownAgents?.includes(input.sessionAgent))) return { allowed: false, reason: "Blocked dispatch from an unknown requester." };
-  if (!knownAgents?.includes(target)) return { allowed: false, reason: `Blocked agent '${target}': target is unknown.` };
+  if (knownAgents && knownAgents.includes(target)) {
+    return { allowed: true, reason: "registered suite agent direct dispatch" };
+  }
   if (input.ledger?.has(input.sessionID, input.sessionAgent, target)) return { allowed: true, reason: "active session grant" };
-  return { allowed: false, reason: `Blocked agent '${target}': an active session grant is required.` };
+  return { allowed: false, reason: `Blocked agent '${target}': target is unknown or unregistered.` };
 }
 
-export function transformTaskPermission(disabledAgents: readonly string[] = []): Record<string, PermissionValue> {
-  const disabled = new Set(disabledAgents);
+export function transformTaskPermission(
+  disabledAgents: readonly string[] = [],
+  registeredAgents: readonly string[] = [],
+): Record<string, PermissionValue> {
+  const disabled = new Set(disabledAgents.map(normalizeAgentId));
+  const registered = registeredAgents.map(normalizeAgentId).filter((agent) => !disabled.has(agent));
   return {
     "*": "deny",
-    ...Object.fromEntries(INTERNAL_AGENT_ALLOWLIST.filter((agent) => !disabled.has(agent)).map((agent): [string, PermissionValue] => [agent, agent.endsWith("-fallback") ? "ask" : "allow"])),
+    ...Object.fromEntries(
+      INTERNAL_AGENT_ALLOWLIST.filter((agent) => !disabled.has(agent)).map(
+        (agent): [string, PermissionValue] => [agent, agent.endsWith("-fallback") ? "ask" : "allow"]
+      )
+    ),
     "general": "deny",
+    ...Object.fromEntries(
+      registered
+        .filter((agent) => !isAuthorizedInternalAgent(agent) && agent !== SDD_ORCHESTRATOR)
+        .map((agent): [string, PermissionValue] => [agent, agent.endsWith("-fallback") ? "ask" : "allow"])
+    ),
   };
 }

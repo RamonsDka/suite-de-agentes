@@ -39,6 +39,13 @@ describe("built-in agent registry", () => {
       "title",
       "summary",
     ]);
+
+    for (const id of ["build", "plan", "general", "explore", "compaction", "title", "summary", "agent-github"]) {
+      const found = CANONICAL_BUILT_IN_AGENTS.find((a) => a.id === id);
+      expect(found, `Built-in agent '${id}' must exist`).toBeDefined();
+      expect(found!.baseline.description.length).toBeGreaterThan(0);
+      expect(found!.baseline.operations.length).toBeGreaterThan(0);
+    }
   });
 
   it("keeps curated baselines immutable when consumers attempt to modify a definition", () => {

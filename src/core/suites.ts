@@ -1,4 +1,4 @@
-import type { AgentCatalogRow, BuiltInOverride, CustomAgent } from "./types.ts";
+import type { AgentCatalogRow, BuiltInOverride, BuiltInRuntimeAgent, CustomAgent } from "./types.ts";
 import { CANONICAL_BUILT_IN_AGENTS, getBuiltInDefinition, mergeCanonicalAgent, normalizeAgentId, restoreBuiltInBaseline } from "./built-in-agents.ts";
 
 export const SUITE_DE_AGENTES_SEED = ["general", "build", "plan", "explore", "compaction", "title", "summary", "agent-github"] as const;
@@ -11,7 +11,7 @@ export function restoreBuiltInAgentOverride(
 }
 
 export function buildSuiteDeAgentesCatalog(
-  runtime: Record<string, { model?: string; variant?: string; description?: string }>,
+  runtime: Record<string, BuiltInRuntimeAgent>,
   custom: Record<string, CustomAgent>,
   seed: readonly string[] = SUITE_DE_AGENTES_SEED,
   modelAssignments: Record<string, string> = {},
@@ -55,13 +55,13 @@ export function buildSuiteDeAgentesCatalog(
       membership: seedIDs.has(id) ? "seed" : "custom",
       enabled: runtimeAgent !== undefined && !disabledIDs.has(id),
       disabled: disabledIDs.has(id),
-      skills: override.skills ? [...override.skills] : customAgent ? [...customAgent.skills] : definition ? [...definition.baseline.skills] : [],
+      skills: override.skills ? [...override.skills] : customAgent ? [...customAgent.skills] : runtimeAgent?.skills ? [...runtimeAgent.skills] : definition ? [...definition.baseline.skills] : [],
       consent: "explicit-current-turn",
     };
     const model = normalizedModels[id] ?? runtimeAgent?.model ?? customAgent?.model ?? definition?.baseline.model;
     const description = override.description ?? runtimeAgent?.description ?? customAgent?.description ?? definition?.baseline.description;
     const variant = normalizedVariants[id] ?? runtimeAgent?.variant ?? definition?.baseline.effort;
-    const operations = override.operations ?? customAgent?.prompt ?? definition?.baseline.operations;
+    const operations = override.operations ?? customAgent?.prompt ?? runtimeAgent?.prompt ?? definition?.baseline.operations;
     if (model !== undefined) row.model = model;
     if (description !== undefined) row.description = description;
     if (variant !== undefined) row.variant = variant;

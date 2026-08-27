@@ -51,6 +51,8 @@ export interface BuiltInRuntimeAgent {
   model?: string;
   variant?: string;
   description?: string;
+  skills?: string[];
+  prompt?: string;
 }
 
 export interface SuiteConfig {

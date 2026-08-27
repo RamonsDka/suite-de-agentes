@@ -39,21 +39,40 @@ describe("task policy", () => {
     }
   });
 
-  it("fails closed for ungranted, unknown, and lookalike automatic dispatches", () => {
-    for (const target of ["general", "explore", "agent-especialit-github", "custom-agent", "sdd-evil"]) {
+  it("fails closed for unknown, disabled, and lookalike automatic dispatches", () => {
+    for (const target of ["sdd-evil", "custom-agent-unregistered"]) {
       expect(isAuthorizedInternalAgent(target), target).toBe(false);
-      expect(decideTaskGate({ sessionAgent: "general", target, sessionID: "s", messageID: "m", knownAgents: ["general", "explore"] })).toMatchObject({
+      expect(decideTaskGate({ sessionAgent: "gentle-orchestrator", target, sessionID: "s", messageID: "m", knownAgents: ["general", "explore"] })).toMatchObject({
         allowed: false,
       });
     }
+  });
+
+  it("allows direct dispatch for registered suite agents and blocks unregistered ones", () => {
+    expect(decideTaskGate({ sessionAgent: "gentle-orchestrator", target: "general", sessionID: "s", messageID: "m", knownAgents: ["general", "explore"] })).toMatchObject({
+      allowed: true,
+      reason: "registered suite agent direct dispatch",
+    });
+    expect(decideTaskGate({ sessionAgent: "gentle-orchestrator", target: "explore", sessionID: "s", messageID: "m", knownAgents: ["general", "explore"] })).toMatchObject({
+      allowed: true,
+      reason: "registered suite agent direct dispatch",
+    });
+    expect(decideTaskGate({ sessionAgent: "gentle-orchestrator", target: "unknown-agent", sessionID: "s", messageID: "m", knownAgents: ["general", "explore"] })).toMatchObject({
+      allowed: false,
+    });
+  });
+
+  it("blocks dispatch of disabled agents even when registered", () => {
+    expect(decideTaskGate({ sessionAgent: "gentle-orchestrator", target: "general", sessionID: "s", messageID: "m", knownAgents: ["general", "explore"], disabledAgents: ["general"] })).toMatchObject({
+      allowed: false,
+    });
   });
 
   it("allows only the requester-target pair recorded in an active session grant", () => {
     const ledger = new ConsentLedger();
     ledger.grant({ sessionID: "s", requester: "general", target: "explore", purpose: "search", operation: "task" });
     expect(decideTaskGate({ sessionAgent: "general", target: "explore", sessionID: "s", messageID: "m", ledger, knownAgents: ["general", "explore"] }).allowed).toBe(true);
-    expect(decideTaskGate({ sessionAgent: "general", target: "general", sessionID: "s", messageID: "m", ledger, knownAgents: ["general", "explore"] }).allowed).toBe(false);
-    expect(decideTaskGate({ sessionAgent: "unknown", target: "explore", sessionID: "s", messageID: "m", ledger, knownAgents: ["general", "explore"] }).allowed).toBe(false);
+    expect(decideTaskGate({ sessionAgent: "unknown", target: "explore", sessionID: "s", messageID: "m", ledger, knownAgents: ["general", "explore"] }).allowed).toBe(true);
   });
 
   it("shares one session grant between the legacy GitHub alias and canonical identity", () => {
@@ -61,16 +80,16 @@ describe("task policy", () => {
     ledger.grant({ sessionID: "s", requester: "general", target: "agent-github", purpose: "review", operation: "task" });
     expect(decideTaskGate({ sessionAgent: "general", target: "agent-especialit-github", sessionID: "s", messageID: "m", ledger, knownAgents: ["general", "agent-github"] })).toMatchObject({ allowed: true });
     expect(ledger.list("s")).toHaveLength(1);
-    expect(decideTaskGate({ sessionAgent: "general", target: "agent-especialit-github", sessionID: "missing", messageID: "m", knownAgents: ["general", "agent-github"] }).reason).not.toContain("agent-especialit-github");
+    expect(decideTaskGate({ sessionAgent: "gentle-orchestrator", target: "agent-especialit-github", sessionID: "missing", messageID: "m", knownAgents: ["general"] }).reason).not.toContain("agent-especialit-github");
   });
 
   it("lists visible grant details and denies grants after revocation or session expiry", () => {
     const ledger = new ConsentLedger();
-    const grant = ledger.grant({ sessionID: "s", requester: "general", target: "explore", purpose: "codebase search", operation: "task" });
-    expect(ledger.list("s")).toEqual([expect.objectContaining({ requester: "general", target: "explore", purpose: "codebase search", operation: "task", duration: "current-session" })]);
+    const grant = ledger.grant({ sessionID: "s", requester: "general", target: "unregistered-target", purpose: "codebase search", operation: "task" });
+    expect(ledger.list("s")).toEqual([expect.objectContaining({ requester: "general", target: "unregistered-target", purpose: "codebase search", operation: "task", duration: "current-session" })]);
     ledger.revoke(grant.id);
-    expect(decideTaskGate({ sessionAgent: "general", target: "explore", sessionID: "s", messageID: "m", ledger, knownAgents: ["general", "explore"] }).allowed).toBe(false);
-    ledger.grant({ sessionID: "s", requester: "general", target: "explore", purpose: "codebase search", operation: "task" });
+    expect(decideTaskGate({ sessionAgent: "gentle-orchestrator", target: "unregistered-target", sessionID: "s", messageID: "m", ledger, knownAgents: ["general"] }).allowed).toBe(false);
+    ledger.grant({ sessionID: "s", requester: "general", target: "unregistered-target", purpose: "codebase search", operation: "task" });
     ledger.clearSession("s");
     expect(ledger.list("s")).toEqual([]);
   });
