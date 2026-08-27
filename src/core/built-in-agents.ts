@@ -47,7 +47,6 @@ export const CANONICAL_BUILT_IN_AGENTS: readonly BuiltInDefinition[] = Object.fr
   definition("compaction", "Compaction", "internal", "Agente interno de conservación silenciosa del contexto de sesión.", "Captura memoria durable y auditoría contextual sin editar ni delegar.", []),
   definition("title", "Title", "internal", "Agente interno para crear títulos breves de sesión.", "Genera títulos con lecturas permitidas y auditoría silenciosa, sin efectos secundarios.", []),
   definition("summary", "Summary", "internal", "Agente interno para resumir resultados durables de sesión.", "Resume contexto y registra auditoría silenciosa sin editar ni ejecutar shell libre.", []),
-  definition(GITHUB_AGENT_ID, GITHUB_AGENT_ID, "public", "Especialista en incidencias, revisiones, PRs y seguridad de GitHub.", "Usa flujos de gh controlados por la persona desarrolladora; aplica mínimo privilegio, SHA pinning y OIDC cuando corresponda; no realiza push autónomo ni entrega automática.", ["github-review-orchestration", "issue-creation", "branch-pr", "chained-pr"]),
 ]);
 
 export const CANONICAL_BUILT_IN_AGENT_IDS = Object.freeze(CANONICAL_BUILT_IN_AGENTS.map((agent) => agent.id));

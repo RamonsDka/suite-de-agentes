@@ -1,7 +1,7 @@
 import type { AgentCatalogRow, BuiltInOverride, BuiltInRuntimeAgent, CustomAgent } from "./types.ts";
 import { CANONICAL_BUILT_IN_AGENTS, getBuiltInDefinition, mergeCanonicalAgent, normalizeAgentId, restoreBuiltInBaseline } from "./built-in-agents.ts";
 
-export const SUITE_DE_AGENTES_SEED = ["general", "build", "plan", "explore", "compaction", "title", "summary", "agent-github"] as const;
+export const SUITE_DE_AGENTES_SEED = ["general", "build", "plan", "explore", "compaction", "title", "summary"] as const;
 
 export function restoreBuiltInAgentOverride(
   id: string,

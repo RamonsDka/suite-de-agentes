@@ -1,61 +1,54 @@
 # Local Installation
 
-Suite de Agentes is designed as a local OpenCode plugin. These examples demonstrate how to build and configure the plugin from a local repository checkout.
+Suite de Agentes is designed as a local OpenCode plugin. You can install it using the automated installer or by manually configuring OpenCode.
 
 ---
 
-## Windows (PowerShell)
+## Automated Installation (Recommended)
 
-### 1. Build the Plugin
+Run the included installer script from the root of the extracted release archive or repository:
 
+### Windows (PowerShell)
 ```powershell
-Set-Location -LiteralPath "C:\path\to\suite-de-agentes"
-npm install
-npm run build
+.\install.ps1
 ```
 
-### 2. Configure OpenCode
-
-Add the server entry to your user configuration in `C:\Users\<username>\.config\opencode\opencode.json`:
-
-```json
-{
-  "plugin": [
-    "C:\\path\\to\\suite-de-agentes\\dist\\server.js"
-  ]
-}
+### Linux / macOS (Bash / Sh)
+```sh
+./install.sh
 ```
 
-Add the TUI entry to `C:\Users\<username>\.config\opencode\tui.json`:
+The installer will:
+1. Copy plugin files to `~/.config/opencode/plugins/suite-de-agentes/`
+2. Install production dependencies with `npm install --omit=dev`
+3. Back up and register the server plugin in `~/.config/opencode/opencode.json`
+4. Back up and register the TUI plugin in `~/.config/opencode/tui.json`
 
-```json
-{
-  "plugin": [
-    "C:\\path\\to\\suite-de-agentes\\dist\\tui.js"
-  ]
-}
-```
+**Options:**
+- `--dry-run`: Preview planned actions without writing any files.
+- `--uninstall`: Remove plugin registrations from OpenCode configuration files.
+- `--target-dir <path>`: Custom destination for the plugin files.
+- `--config-dir <path>`: Custom directory for OpenCode configuration.
 
 ---
 
-## POSIX (Linux / macOS)
+## Manual Installation
 
 ### 1. Build the Plugin
 
 ```sh
-cd /path/to/suite-de-agentes
 npm install
 npm run build
 ```
 
 ### 2. Configure OpenCode
 
-Add the server entry to `~/.config/opencode/opencode.json`:
+Add the server entry to your user configuration in `~/.config/opencode/opencode.json`:
 
 ```json
 {
   "plugin": [
-    "/path/to/suite-de-agentes/dist/server.js"
+    "/absolute/path/to/suite-de-agentes/dist/server.js"
   ]
 }
 ```
@@ -65,12 +58,12 @@ Add the TUI entry to `~/.config/opencode/tui.json`:
 ```json
 {
   "plugin": [
-    "/path/to/suite-de-agentes/dist/tui.js"
+    "/absolute/path/to/suite-de-agentes/dist/tui.js"
   ]
 }
 ```
 
-*Note: The server package exports `.` and `./server` to `dist/server.js`; the TUI package export is `./tui` to `dist/tui.js`. Specifying absolute paths ensures predictable resolution without requiring an npm registry publication.*
+*(On Windows, use paths such as `C:/Users/<username>/.config/opencode/plugins/suite-de-agentes/dist/server.js`.)*
 
 ---
 
@@ -90,12 +83,10 @@ Restart OpenCode after updating configuration.
 
 After OpenCode loads the plugin, the server `config` hook replaces the in-memory top-level and `agent["gentle-orchestrator"].permission.task` maps with a strict `*`: `deny` policy plus exact allows for configured internal Gentle-AI agents (`sdd-*`, `review-*`, `jd-*`).
 
-The per-agent map is the effective security boundary because OpenCode gives it precedence over top-level permissions. This prevents stale task rules from reintroducing unvetted permissions.
-
-User agents (`general`, `agent-github`, custom agents) and lookalike names (such as `sdd-evil`) always require an explicit, current-turn consent grant:
+External and custom agents require an explicit, current-turn consent grant:
 
 ```text
-usa también agente: agent-github
+usa también agente: <agent-id>
 ```
 
-The hook preserves unrelated configuration and permission fields and never writes global configuration. Restart OpenCode after rebuilding the plugin.
+The hook preserves unrelated configuration and permission fields and never modifies user credentials or unrelated global configurations.

@@ -1,23 +1,16 @@
-name: CI
+name: Release
 
 on:
   push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
+    tags:
+      - 'v*'
 
 permissions:
-  contents: read
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  contents: write
 
 jobs:
-  verify:
-    name: verify
+  release:
+    name: Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -46,7 +39,17 @@ jobs:
 
       - name: Verify release package assets
         run: |
-          test -f release/suite-de-agentes-v1.1.0.zip
-          test -f release/suite-de-agentes-v1.1.0.tar.gz
-          test -f release/SHA256SUMS.txt
           cd release && sha256sum -c SHA256SUMS.txt
+
+      - name: Publish GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="${{ github.ref_name }}"
+          gh release create "$TAG_NAME" \
+            release/*.zip \
+            release/*.tar.gz \
+            release/SHA256SUMS.txt \
+            --title "Suite de Agentes $TAG_NAME" \
+            --generate-notes \
+            --verify-tag

@@ -32,15 +32,16 @@ describe("Agent Suite controller adapter", () => {
   it("builds the initial snapshot from persisted and runtime agents", () => {
     const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
     writeFileSync(path, JSON.stringify({ version: 1, customAgents: { "smoke-custom": { id: "smoke-custom", description: "Smoke custom", model: "openai/gpt-5", prompt: "Smoke", permissions: { read: "allow" }, skills: [] } }, modelAssignments: {}, variantAssignments: {} }));
-    const controller = createAgentSuiteController([], "1.0.1", { path, runtime: { general: { model: "openai/gpt-5" }, "smoke-custom": { model: "openai/gpt-5" } } });
+    const controller = createAgentSuiteController([], "1.1.0", { path, runtime: { general: { model: "openai/gpt-5" }, "smoke-custom": { model: "openai/gpt-5" } } });
     const visibleIds = controller.snapshot().rows.map(({ id }) => id);
-    expect(visibleIds).toEqual(["agent-github", "build", "compaction", "explore", "general", "plan", "smoke-custom", "summary", "title"]);
-    expect(visibleIds.join(" ")).not.toContain("agent-especialit-github");
+    expect(visibleIds).toEqual(["build", "compaction", "explore", "general", "plan", "smoke-custom", "summary", "title"]);
+    expect(visibleIds.join(" ")).not.toContain("agent-github");
+    expect(visibleIds.join(" ")).not.toContain("agent-notebooklm");
   });
 
   it("refreshes the catalog after an external orchestrator changes the suite config", () => {
     const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
-    const controller = createAgentSuiteController([], "1.0.1", { path, runtime: {} });
+    const controller = createAgentSuiteController([], "1.1.0", { path, runtime: {} });
 
     saveSuiteConfig(path, {
       version: 1,
@@ -55,20 +56,20 @@ describe("Agent Suite controller adapter", () => {
 
   it("persists a created model and effort through assignments across reload", async () => {
     const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
-    const controller = createAgentSuiteController([], "1.0.1", { path, runtime: {} });
+    const controller = createAgentSuiteController([], "1.1.0", { path, runtime: {} });
 
     await controller.createAgent(draft);
 
     expect(controller.snapshot().rows).toEqual(expect.arrayContaining([expect.objectContaining({ id: draft.id, model: draft.model, variant: draft.effort })]));
     expect(loadSuiteConfig(path)).toMatchObject({ modelAssignments: { [draft.id]: draft.model }, variantAssignments: { [draft.id]: draft.effort } });
 
-    const reloaded = createAgentSuiteController([], "1.0.1", { path, runtime: {} });
+    const reloaded = createAgentSuiteController([], "1.1.0", { path, runtime: {} });
     expect(reloaded.snapshot().rows).toEqual(expect.arrayContaining([expect.objectContaining({ id: draft.id, model: draft.model, variant: draft.effort })]));
   });
 
   it("persists model and effort with one controller mutation", async () => {
     const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
-    const controller = createAgentSuiteController([], "1.0.1", { path, runtime: { general: { model: "openai/gpt-5" } } });
+    const controller = createAgentSuiteController([], "1.1.0", { path, runtime: { general: { model: "openai/gpt-5" } } });
 
     await controller.setModelAndEffort("general", "anthropic/sonnet", "high");
 
@@ -76,25 +77,24 @@ describe("Agent Suite controller adapter", () => {
     expect(controller.snapshot().rows).toEqual(expect.arrayContaining([expect.objectContaining({ id: "general", model: "anthropic/sonnet", variant: "high" })]));
   });
 
-  it("assigns a nested model with default effort to the GitHub agent", async () => {
+  it("assigns a nested model with default effort to a built-in agent", async () => {
     const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
     saveSuiteConfig(path, {
       version: 1,
       customAgents: {},
-      modelAssignments: { "agent-especialit-github": "opencode/x-preview-f-free" },
-      variantAssignments: { "agent-especialit-github": "low" },
+      modelAssignments: { general: "opencode/x-preview-f-free" },
+      variantAssignments: { general: "low" },
     });
-    const controller = createAgentSuiteController([], "1.0.1", { path, runtime: { "agent-especialit-github": { model: "opencode/x-preview-f-free" } } });
+    const controller = createAgentSuiteController([], "1.1.0", { path, runtime: { general: { model: "opencode/x-preview-f-free" } } });
 
-    await controller.setModelAndEffort("agent-especialit-github", "cliproxyapi/google-1/gemini-3.7-flash-high", "");
+    await controller.setModelAndEffort("general", "cliproxyapi/google-1/gemini-3.7-flash-high", "");
 
     expect(loadSuiteConfig(path)).toMatchObject({
-      modelAssignments: { "agent-github": "cliproxyapi/google-1/gemini-3.7-flash-high" },
+      modelAssignments: { general: "cliproxyapi/google-1/gemini-3.7-flash-high" },
       variantAssignments: {},
     });
-    expect(readFileSync(path, "utf8")).not.toContain("agent-especialit-github");
-    const updated = controller.snapshot().rows.find((row) => row.id === "agent-github");
-    expect(updated).toMatchObject({ id: "agent-github", model: "cliproxyapi/google-1/gemini-3.7-flash-high" });
+    const updated = controller.snapshot().rows.find((row) => row.id === "general");
+    expect(updated).toMatchObject({ id: "general", model: "cliproxyapi/google-1/gemini-3.7-flash-high" });
     expect(updated).toMatchObject({ variant: "medium" });
   });
 
@@ -104,7 +104,7 @@ describe("Agent Suite controller adapter", () => {
     const agent = { id: "old-agent", description: "Old", model: "openai/x", prompt: "Do work.", permissions: { read: "allow" as const }, skills: ["testing"] };
     saveSuiteConfig(path, { version: 1, customAgents: { "old-agent": agent }, modelAssignments: { "old-agent": "openai/assigned" }, variantAssignments: { "old-agent": "high" } });
     materializeGlobalAgent(agent, () => true, home);
-    const controller = createAgentSuiteController([], "1.0.1", { path, home, runtime: { "old-agent": { model: agent.model } } });
+    const controller = createAgentSuiteController([], "1.1.0", { path, home, runtime: { "old-agent": { model: agent.model } } });
 
     await controller.patchAgent!("old-agent", { newId: "new-agent", description: "Updated", skills: ["linting"] });
 
@@ -124,7 +124,7 @@ describe("Agent Suite controller adapter", () => {
     const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
     const agent = { id: "review-agent", description: "Old", model: "openai/old", prompt: "Old operations", permissions: { read: "allow" as const }, skills: [] };
     saveSuiteConfig(path, { version: 1, customAgents: { [agent.id]: agent }, modelAssignments: {}, variantAssignments: {} });
-    const controller = createAgentSuiteController([], "1.0.1", { path, runtime: { [agent.id]: { model: agent.model } } });
+    const controller = createAgentSuiteController([], "1.1.0", { path, runtime: { [agent.id]: { model: agent.model } } });
 
     await controller.patchAgent(agent.id, { description: "Improved", skills: ["testing"], operations: "Review safely", model: "anthropic/sonnet", effort: "high" });
 
@@ -142,7 +142,7 @@ describe("Agent Suite controller adapter", () => {
     const controllerAgent = { ...persistedAgent, prompt: "" };
     saveSuiteConfig(path, { version: 1, customAgents: { "old-agent": controllerAgent }, modelAssignments: {}, variantAssignments: {} });
     materializeGlobalAgent(persistedAgent, () => true, home);
-    const controller = createAgentSuiteController([], "1.0.1", { path, home, runtime: { "old-agent": { model: persistedAgent.model } } });
+    const controller = createAgentSuiteController([], "1.1.0", { path, home, runtime: { "old-agent": { model: persistedAgent.model } } });
 
     await expect(controller.patchAgent!("old-agent", { newId: "new-agent" })).rejects.toThrow(/requires model and prompt/i);
 
@@ -159,7 +159,7 @@ describe("Agent Suite controller adapter", () => {
     const agent = { id: "old-agent", description: "Old", model: "openai/x", prompt: "Do work.", permissions: { read: "allow" as const }, skills: [] };
     saveSuiteConfig(path, { version: 1, customAgents: { "old-agent": agent }, modelAssignments: {}, variantAssignments: {} });
     materializeGlobalAgent(agent, () => true, home);
-    const controller = createAgentSuiteController([], "1.0.1", { path, home, runtime: { "old-agent": { model: agent.model } } });
+    const controller = createAgentSuiteController([], "1.1.0", { path, home, runtime: { "old-agent": { model: agent.model } } });
 
     await expect(controller.patchAgent!("old-agent", { newId: "new-agent", operations: "" })).rejects.toThrow(/requires model and prompt/i);
 
@@ -169,22 +169,20 @@ describe("Agent Suite controller adapter", () => {
     expect(existsSync(globalAgentPath("new-agent", home))).toBe(false);
   });
 
-  it("rejects a legacy alias rename into the canonical seed without migrating files", async () => {
+  it("rejects renaming into a canonical seed member without migrating files", async () => {
     const home = mkdtempSync(join(tmpdir(), "agent-suite-controller-home-"));
     const path = join(mkdtempSync(join(tmpdir(), "agent-suite-controller-")), "suites.json");
     const agent = { id: "old-agent", description: "Old", model: "openai/x", prompt: "Do work.", permissions: { read: "allow" as const }, skills: [] };
     saveSuiteConfig(path, { version: 1, customAgents: { "old-agent": agent }, modelAssignments: {}, variantAssignments: {} });
     materializeGlobalAgent(agent, () => true, home);
     const originalFile = readFileSync(globalAgentPath("old-agent", home), "utf8");
-    const controller = createAgentSuiteController([], "1.0.1", { path, home, runtime: { "old-agent": { model: agent.model } } });
+    const controller = createAgentSuiteController([], "1.1.0", { path, home, runtime: { "old-agent": { model: agent.model } } });
 
-    await expect(controller.patchAgent!("old-agent", { newId: "agent-especialit-github" })).rejects.toThrow(/duplicates a Suite de Agentes seed member/i);
+    await expect(controller.patchAgent!("old-agent", { newId: "general" })).rejects.toThrow(/collision|seed|duplicate/i);
 
     expect(loadSuiteConfig(path).customAgents).toEqual({ "old-agent": agent });
-    expect(controller.snapshot().rows.some((row) => row.id === "agent-github")).toBe(true);
-    expect(controller.snapshot().rows.map((row) => row.id).join(" ")).not.toContain("agent-especialit-github");
+    expect(controller.snapshot().rows.some((row) => row.id === "general")).toBe(true);
     expect(readFileSync(globalAgentPath("old-agent", home), "utf8")).toBe(originalFile);
-    expect(existsSync(globalAgentPath("agent-github", home))).toBe(false);
   });
 
   it("rejects assignment-map destination collisions before persisting or migrating", async () => {
@@ -194,7 +192,7 @@ describe("Agent Suite controller adapter", () => {
     saveSuiteConfig(path, { version: 1, customAgents: { "old-agent": agent }, modelAssignments: { "reserved-agent": "openai/reserved" }, variantAssignments: {} });
     materializeGlobalAgent(agent, () => true, home);
     const before = readFileSync(path, "utf8");
-    const controller = createAgentSuiteController([], "1.0.1", { path, home, runtime: { "old-agent": { model: agent.model } } });
+    const controller = createAgentSuiteController([], "1.1.0", { path, home, runtime: { "old-agent": { model: agent.model } } });
 
     await expect(controller.patchAgent("old-agent", { newId: "reserved-agent" })).rejects.toThrow(/collision|colisi[oó]n/i);
 
@@ -211,7 +209,7 @@ describe("Agent Suite controller adapter", () => {
       modelAssignments: { general: "openai/assigned" },
       variantAssignments: { general: "high" },
     });
-    const controller = createAgentSuiteController([], "1.0.1", {
+    const controller = createAgentSuiteController([], "1.1.0", {
       path,
       runtime: { general: { model: "openai/runtime", variant: "runtime", description: "Runtime" } },
     });
@@ -234,7 +232,7 @@ describe("Agent Suite controller adapter", () => {
       variantAssignments: { general: "high" },
       baseOverrides: { general: { description: "Edited base", skills: ["testing"], operations: "Operate safely." } },
     });
-    const controller = createAgentSuiteController([], "1.0.1", { path, runtime: { general: { model: "openai/runtime", description: "Runtime" } } });
+    const controller = createAgentSuiteController([], "1.1.0", { path, runtime: { general: { model: "openai/runtime", description: "Runtime" } } });
 
     await controller.deactivateAgent!("general");
 
@@ -250,7 +248,7 @@ describe("Agent Suite controller adapter", () => {
   });
 
   it("never physically deletes a seed agent", async () => {
-    const controller = createAgentSuiteController([], "1.0.1", { runtime: { general: { model: "openai/gpt-5" } } });
+    const controller = createAgentSuiteController([], "1.1.0", { runtime: { general: { model: "openai/gpt-5" } } });
 
     await expect(controller.deleteAgent("general")).rejects.toThrow(/base|seed|delete|eliminar/i);
     expect(controller.snapshot().rows.some((item) => item.id === "general")).toBe(true);
@@ -265,7 +263,7 @@ describe("Agent Suite controller adapter", () => {
       variantAssignments: { explore: "high" },
       builtInOverrides: { explore: { description: "Edited", skills: ["testing"], operations: "Edited operations" } },
     });
-    const controller = createAgentSuiteController([], "1.0.1", { path, runtime: { build: { model: "openai/runtime" }, explore: { model: "openai/runtime" }, compaction: { model: "openai/runtime" } } });
+    const controller = createAgentSuiteController([], "1.1.0", { path, runtime: { build: { model: "openai/runtime" }, explore: { model: "openai/runtime" }, compaction: { model: "openai/runtime" } } });
 
     await controller.restoreBuiltIn!("explore");
     expect(loadSuiteConfig(path)).toMatchObject({ builtInOverrides: {}, modelAssignments: { build: "openai/assigned" } });
@@ -277,7 +275,7 @@ describe("Agent Suite controller adapter", () => {
   it("lists and immediately revokes the active grants injected for the current TUI session", async () => {
     const ledger = new ConsentLedger();
     const grant = ledger.grant({ sessionID: "session-1", requester: "build", target: "explore", purpose: "codebase search", operation: "task" });
-    const controller = createAgentSuiteController([], "1.0.1", { runtime: { general: { model: "openai/gpt-5" } }, ledger, sessionID: "session-1" });
+    const controller = createAgentSuiteController([], "1.1.0", { runtime: { general: { model: "openai/gpt-5" } }, ledger, sessionID: "session-1" });
 
     expect(controller.activeGrants?.()).toEqual([expect.objectContaining({ id: grant.id, requester: "build", target: "explore", duration: "current-session" })]);
     await controller.revokeGrant!(grant.id);
@@ -290,7 +288,7 @@ describe("Agent Suite controller adapter", () => {
     const agent = { id: "old-agent", description: "Old", model: "openai/x", prompt: "Do work.", permissions: { read: "allow" as const }, skills: [] };
     saveSuiteConfig(path, { version: 1, customAgents: { "old-agent": agent }, modelAssignments: { "old-agent": "openai/assigned" }, variantAssignments: { "old-agent": "high" } });
     materializeGlobalAgent(agent, () => true, home);
-    const controller = createAgentSuiteController([], "1.0.1", { path, home, runtime: { "old-agent": { model: agent.model } } });
+    const controller = createAgentSuiteController([], "1.1.0", { path, home, runtime: { "old-agent": { model: agent.model } } });
 
     await controller.deleteAgent("old-agent");
 

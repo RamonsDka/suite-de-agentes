@@ -1,6 +1,6 @@
 {
   "name": "opencode-agent-suite",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Named agent suites, model profiles, and per-turn consent controls for OpenCode",
   "type": "module",
   "main": "./dist/server.js",
@@ -10,12 +10,13 @@
     "./tui": { "import": "./dist/tui.js" },
     "./core": { "import": "./dist/core/index.js" }
   },
-  "files": ["dist", "README.md", "LICENSE", "docs", "examples"],
+  "files": ["dist", "README.md", "LICENSE", "docs", "examples", "install.ps1", "install.sh", "scripts"],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "package": "node scripts/package.mjs",
     "prepack": "npm run build"
   },
   "peerDependencies": {

@@ -44,11 +44,11 @@ describe("catalog-only agent suite mode", () => {
     const catalog = buildSuiteDeAgentesCatalog(
       {},
       {
-        "agent-notebooklm": {
-          id: "agent-notebooklm",
-          description: "NotebookLM specialist for research workflows",
-          skills: ["notebooklm", "notebooklm-library-curator"],
-          prompt: "Drive NotebookLM workflows safely.",
+        "custom-researcher": {
+          id: "custom-researcher",
+          description: "Research specialist for codebase analysis",
+          skills: ["research"],
+          prompt: "Analyze codebase safely.",
           model: "anthropic/claude-3-5-sonnet",
           permissions: {},
         },
@@ -56,7 +56,7 @@ describe("catalog-only agent suite mode", () => {
     );
 
     const ids = catalog.map((r) => r.id);
-    for (const required of ["build", "plan", "general", "explore", "compaction", "title", "summary", "agent-github", "agent-notebooklm"]) {
+    for (const required of ["build", "plan", "general", "explore", "compaction", "title", "summary", "custom-researcher"]) {
       expect(ids, `Catalog must contain agent '${required}'`).toContain(required);
       const row = catalog.find((r) => r.id === required)!;
       expect(row.description, `Agent '${required}' must have a description`).toBeDefined();
